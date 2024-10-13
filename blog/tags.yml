@@ -1,19 +1,34 @@
 facebook:
-  label: Facebook
-  permalink: /facebook
-  description: Facebook tag description
+    label: Facebook
+    permalink: /facebook
+    description: Facebook tag description
 
 hello:
-  label: Hello
-  permalink: /hello
-  description: Hello tag description
+    label: Hello
+    permalink: /hello
+    description: Hello tag description
 
 docusaurus:
-  label: Docusaurus
-  permalink: /docusaurus
-  description: Docusaurus tag description
+    label: Docusaurus
+    permalink: /docusaurus
+    description: Docusaurus tag description
 
 hola:
-  label: Hola
-  permalink: /hola
-  description: Hola tag description
+    label: Hola
+    permalink: /hola
+    description: Hola tag description
+
+frontend:
+    label: FrontEnd
+    permalink: /frontend
+    description: Frontend stuff
+
+retrospective:
+    label: Retrospective
+    permalink: /retrospective
+    description: Personal Retrospective for anything
+
+career:
+    label: Career
+    permalink: /career
+    description: Career growth
