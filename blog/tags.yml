@@ -32,3 +32,8 @@ career:
     label: Career
     permalink: /career
     description: Career growth
+
+javascript:
+    label: JavaScript
+    permalink: /javascript
+    description: JavaScript
