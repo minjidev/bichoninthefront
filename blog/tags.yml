@@ -37,3 +37,13 @@ javascript:
     label: JavaScript
     permalink: /javascript
     description: JavaScript
+
+three.js:
+    label: Three.js
+    permalink: /three.js
+    description: Three.js
+
+animation:
+    label: Animation
+    permalink: /animation
+    description: Animation

@@ -1,0 +1,149 @@
+---
+slug: 2024-11-10-requestAnimationFrame
+date: 2024-11-10T09:12
+title: "자바스크립트로 자연스러운 애니메이션하기: requestAnimationFrame"
+authors: MinjiKim
+tags: [frontend, javascript, three.js, animation]
+comments: true
+---
+
+# requestAnimation: 자바스크립트로 자연스러운 애니메이션하기
+
+
+## 들어가며
+
+레이싱 게임을 하다 갑자기 타고 있던 카트가 이상한 방향으로 움직이는 것을 경험해 본 적이 있으신가요? 이는 프레임 속도가 떨어지거나 애니메이션 타이밍이 맞지 않을 때 발생합니다.
+이런 문제를 해결하기 위해 자바스크립트에서는 `requestAnimationFrame을` 제공합니다. 이 글에서는 화면 주사율에 맞춰 애니메이션을 업데이트할 수 있는 `requestAnimationFrame`에 대해 알아보겠습니다.
+
+<!-- truncate -->
+
+:::note[화면 주사율(Refresh rate)이란?]
+
+![news_image_20049](https://github.com/user-attachments/assets/03297df1-7d69-48d5-901e-4d210f653c04)
+
+- 1초 동안 화면에 얼마나 많은 장면을 표시할 수 있는지 나타내는 수치로, 단위는 헤르츠(Hz)를 사용하며, 화면 재생률이라고도 합니다.
+- 1초 동안 화면이 60번 출력되면 60Hz, 120번 출력되면 120Hz라고 표시하고, 주사율이 높을수록 화면 깜빡임 현상이 덜해 더욱 매끄럽고 연속적인 움직임을 볼 수 있습니다.
+- 화면 주사율이 낮으면 화면에 잔상이 남는 [모션 블러](https://www.youtube.com/watch?v=v1xlNFI5ip0&t=14s) 현상이 나타나 눈의 피로도가 올라갑니다. 현재 대부분의 TV나 모니터는 60Hz 이상으로 고주사율 TV는 120\~144Hz, 게이밍용 모니터는 240Hz\~360Hz의 사양을 갖추고 있습니다.
+
+<b>REF</b>. [디스플레이 용어.zip EP.15 : 화면 주사율(Refresh Rate)](https://news.samsungdisplay.com/34249?category=56&page=1&type=list)
+:::
+
+## requestAnimationFrame
+
+`requestAnimationFrame`은 애니메이션을 매끄럽게 구현하기 위한 자바스크립트 API입니다.
+브라우저가 화면을 그리기 전에 `requestAnimationFrame`에 전달된 콜백함수를 호출하여, 화면 주사율에 따라 애니메이션이 자연스럽게 동작하도록 합니다. 즉, 화면이 새로 그려지는 시점과 애니메이션 업데이트 시점을 최대한 일치시키는 역할을 합니다.
+
+<br />
+
+### 왜 requestAnimationFrame을 사용해야 할까요?
+
+- 주사율 맞춤형 애니메이션
+
+    애니메이션은 사실 여러 장의 사진을 찍는 것과 같다는 말을 많이 들어보셨을 것입니다. 브라우저에서는 사진을 찍는다는 것을 화면을 한 번 그린다고 이해할 수 있습니다. 이 개념이 주사율이고, 1초에 화면에 얼마나 많은 장면을 표시할 수 있는지 나타냅니다.
+
+    `reqeustAnimationFrame`은 화면의 주사율에 맞춰 자바스크립트가 프레임 시작 시점에 실행되도록 보장하여 CPU 사용을 줄이고 애니메이션을 매끄럽게 만들 수 있습니다.
+
+- 백그라운드에서 동작 중지
+
+`reqeustAnimationFrame`은 대부분의 브라우저에서 백그라운드 탭에서 일시 중지하여 자원을 절약합니다. 이를 통해 성능을 최적화하고 배터리 소모를 줄일 수 있습니다.
+
+- 프레임에 독립적인(Frame-Independent) 애니메이션
+
+    timestamp를 통해 시간 기반의 애니메이션을 실행할 수 있습니다. 이를 통해 프레임 드랍이 발생하거나 주사율이 다른 환경에서도 일정한 애니메이션 속도를 보장할 수 있습니다.
+
+<br />
+
+### Frame-Dependent vs. Frame-Independent 애니메이션
+
+- 프레임 종속 애니메이션(Frame-Dependent)
+
+각 프레임마다 애니메이션을 업데이트하지만, 프레임 드랍 시 애니메이션 속도가 달라져 일관성을 유지하기 어렵습니다.
+
+- 시간 기반 애니메이션(Frame-Independent)
+
+실제 경과 시간을 기반으로 애니메이션을 업데이트하여 주사율에 상관없이 동일한 속도로 애니메이션을 실행합니다. 따라서 프레임 드랍이 발생하더라도 일관적이고 매끄러운 애니메이션이 가능합니다.
+
+
+그렇다면 둘 중 어떤 방법을 사용하는 것이 좋을까요? 일반적으로는 프레임과 독립적인 애니메이션인 시간 기반 애니메이션을 많이 사용합니다.
+특히 물리나 정확한 타이밍이 필요한 애니메이션에서 시간 기반 애니메이션이 더욱 중요한 역할을 합니다.
+
+
+> 🤔 시간 기반 애니메이션이라면 `setInterval`을 사용하면 되지 않나요?
+
+ `setInterval은` 고정된 간격으로 실행되지만, 태스크 큐가 바쁠 경우 일관성이 떨어질 수 있습니다. 반면 `requestAnimationFrame`은 프레임과 동기화된 업데이트를 통해 실제 상황에 맞춰 애니메이션을 매끄럽게 실행할 수 있습니다.
+
+ 조금 더 자세히 살펴보면, `setInterval은` 일정 시간마다 실행하지만, 콜스택이 비워질 때까지 태스크 큐가 지연될 수 있어 원하는 시간 간격마다의 실행을 보장하지 못합니다. 그리고 만약 그 시간 간격마다 렌더링 된다고 해도 화면이 그려지는 중간, 즉 프레임이 그려지는 사이에 애니메이션을 업데이트하여 어색할 수 있습니다. 반면, requestAnimationFrame은 각 프레임 간 경과 시간을 계산하여 프레임 수와 관계 없이 시간 기반으로 애니메이션을 구현할 수 있습니다.
+
+ 간단히 말해, 화면을 그리는 시점(프레임 업데이트 시점)이 느려지거나 한 화면을 그리는 것(한 프레임)을 건너뛰더라도 다시 화면을 그릴 때까지 기다렸다가 화면이 그려지기 이전에 애니메이션을 업데이트할 수 있음을 보장한다는 것입니다.
+
+
+<br />
+
+### 사용 예제: Three.js에서 Animation Loop
+
+![Nov-02-2024 11-03-05](https://github.com/user-attachments/assets/c7e4d302-4dba-4dab-951a-43d57c74c74c)
+
+현재 막 배우기 시작한 Three.js에서 장면 내 물체의 상태를 업데이트하고, 이를 반복적으로 렌더링하여 위와 같은 애니메이션 효과를 만드는 과정을 Animation Loop라고 합니다.
+앞서 살펴봤던 `requestAnimationFrame`을 사용해 렌더 함수를 반복해서 호출하는 방식으로 사용합니다.
+
+각 프레임마다 Animation Loop는
+
+- 경과 시간을 계산합니다.
+- 경과 시간을 기반으로 위치, 회전, 또는 다른 애니메이션할 프로퍼티를 업데이트합니다.
+- 카메라 관점에서 장면을 렌더링하여 애니메이션의 다음 프레임을 그립니다.
+
+```tsx
+// 마지막 프레임의 타임스탬프
+let lastTimestamp = 0
+
+const animate = (timestamp) => {
+	if (!lastTimestamp) lastTimestamp = timestamp
+
+    // 경과 시간 계산
+	const delta = (timestamp - lastTimestamp) / 1000
+	lastTimestamp = timestamp
+
+	// 기반으로 위치 계산
+	const currentX = parseFloat(box.style.left) || 0
+	box.style.left = currentX + speed * delta + 'px'
+
+	// 다음 프레임 요청
+	requestAnimationFrame(animate)
+}
+
+requestAnimationFrame(animate)
+```
+
+Three.js에서는 `requestAnimationFrame` 이외에도 시간 기반의 애니메이션을 구현할 수 있는 다른 방법들도 존재합니다.
+`Clock` 클래스를 활용하면 간편하게 프레임 간 경과 시간을 계산할 수 있어 애니메이션의 시간 기반 업데이트가 간단해집니다.
+
+```tsx
+// ... 캔버스, 장면, 물체, 카메라, 렌더러 생성
+
+const clock = new THREE.Clock()
+
+// 시간 기반 애니메이션
+const tick = () =>
+{
+    // 경과 시간 계산
+    const elapsedTime = clock.getElapsedTime()
+
+    // 물체 업데이트
+    mesh.rotation.y = elapsedTime;
+
+    // 렌더
+    renderer.render(scene, camera)
+
+    // 다음 프레임이 tick 함수 호출
+    window.requestAnimationFrame(tick)
+}
+
+tick()
+```
+
+
+
+## 나가며
+
+Three.js를 접하면서 자연스레 물체의 애니메이션을 구현하기 위해 `requestAnimationFrame`을 사용하는 과정에서 화면이 한 프레임을 그리는 시간에 가장 적절한 타이밍에 맞추어 애니메이션을 업데이트하는 방법이 `requestAnimationFrame`임을 알게 되었습니다.
+이후 빠르게 업데이트되는 리사이즈 UI의 경우에도 적용이 가능하다는 점을 깨달았습니다. 성능을 개선하고 매끄럽게 렌더링되는 애니메이션을 구현하고자 한다면, `requestAnimationFrame`을 적절한 곳에 활용해 보시면 좋을 것 같습니다.
