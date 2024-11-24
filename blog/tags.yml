@@ -47,3 +47,8 @@ animation:
     label: Animation
     permalink: /animation
     description: Animation
+
+svg:
+    label: SVG
+    permalink: /svg
+    description: SVG
