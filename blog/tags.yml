@@ -52,3 +52,24 @@ svg:
     label: SVG
     permalink: /svg
     description: SVG
+
+
+build:
+    label: Build
+    permalink: /build
+    description: Build
+
+workflow:
+    label: Workflow
+    permalink: /workflow
+    description: Workflow
+
+github-actions:
+    label: GitHub Actions
+    permalink: /github-actions
+    description: GitHub Actions
+
+troubleshooting:
+    label: Troubleshooting
+    permalink: /troubleshooting
+    description: Troubleshooting
