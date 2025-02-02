@@ -73,3 +73,18 @@ troubleshooting:
     label: Troubleshooting
     permalink: /troubleshooting
     description: Troubleshooting
+
+http:
+    label: HTTP
+    permalink: /http
+    description: HTTP
+
+web:
+    label: Web
+    permalink: /web
+    description: Web
+
+network:
+    label: Network
+    permalink: /network
+    description: Network

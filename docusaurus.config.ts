@@ -89,6 +89,10 @@ const config: Config = {
             disableSwitch: false,
             respectPrefersColorScheme: false,
         },
+        tableOfContents: {
+            minHeadingLevel: 2,
+            maxHeadingLevel: 4,
+        },
         footer: {
             style: "dark",
             links: [
@@ -137,6 +141,7 @@ const config: Config = {
         prism: {
             theme: prismThemes.github,
             darkTheme: prismThemes.dracula,
+            additionalLanguages: ["bash"]
         },
     } satisfies Preset.ThemeConfig,
 };
