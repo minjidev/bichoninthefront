@@ -88,3 +88,9 @@ network:
     label: Network
     permalink: /network
     description: Network
+
+
+ci-cd:
+    label: CI/CD
+    permalink: /ci-cd
+    description: CI/CD

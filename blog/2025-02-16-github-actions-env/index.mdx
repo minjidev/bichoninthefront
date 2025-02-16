@@ -1,0 +1,229 @@
+---
+slug: 2025-02-16-github-actions-env
+date: 2025-02-16T23:13
+title: "GitHub Actions에서 환경 변수 이해하기"
+authors: MinjiKim
+tags: [workflow, github-actions, ci-cd]
+comments: true
+---
+
+## 들어가며
+
+GitHub Actions에서 E2E 테스트 워크플로우를 작성하면서, 여러 레벨에서 환경 변수를 생성하고 접근할 수 있다는 점이 혼란을 유발할 수 있다는 생각이 들었습니다. GitHub이 워크플로우 실행 시 자동으로 생성하는 기본 환경 변수도 있지만, 사용자가 직접 워크플로우, job, step 레벨에서 커스텀 변수를 정의할 수도 있습니다.
+
+이 글에서는 GitHub Actions 공식 문서를 바탕으로 환경 변수를 설정하고 활용하는 방법을 정리합니다.
+
+<!-- truncate -->
+
+- GitHub Actions에서 변수란 무엇인지
+- 환경 변수를 정의할 수 있는 다양한 범위
+- run 단계에서 환경 변수의 동작 방식
+
+위 내용을 살펴보며, 혼동할 수 있는 개념들을 명확히 정리해보겠습니다.
+
+## 변수란?
+
+변수를 통해 서버명, 특정 경로, 유저명과 같은  민감하지 않은 설정 정보를 저장하거나 재사용할 수 있습니다. GitHub Actions에서는 run 단계에서 러너가 환경 변수 값을 채운 후 실제 명령어 실행 시 적용됩니다.
+
+- 예제
+
+```yaml
+name: What To Eat
+on:
+  workflow_dispatch
+jobs:
+  eating_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Proudly say your dinner menu"
+        run: echo "오늘 저녁은 ${DINNER_MENU}!"
+        env:
+          DINNER_MENU: 페퍼로니 피자
+```
+
+- 출력
+
+```shell
+오늘 저녁은 페퍼로니 피자!
+```
+
+이처럼 환경 변수는 명령어 실행 시 값을 채워 넣을 수 있도록 해줍니다.
+
+<br />
+
+## 환경 변수 설정하기
+
+워크플로우에서 실행하는 명령어들은 변수를 생성하고, 읽고, 수정할 수 있습니다. GitHub Actions에서 환경 변수를 설정하는 방법은 크게 두 가지입니다.
+
+1. **하나의 워크플로우** 내에서만 사용할 환경 변수 → YAML 파일 내에서 `env` 키워드 사용하여 정의
+2. **여러 워크플로우**에서 사용할 설정 변수 정의 → GitHub UI에서 설정(레포지토리, 조직, 환경 수준)
+
+| 유형 | 설정 방법 | 적용 범위 |
+| --- | --- | --- |
+| 환경 변수(Environment Variables) | env 키 사용(workflow.yml) | 하나의 워크플로우 내에서만 사용 가능  |
+| 설정 변수(Configuration Variables) | GitHub UI에서 설정 | 여러 워크플로우에서 공통 사용 가능  |
+
+일반적으로 둘을 통칭하여 환경 변수라고 부르지만, GitHub 공식 문서에서는 Environment Variables와 Configuration Variables를 구분하고 있는 것을 볼 수 있습니다.
+
+### 하나의 워크플로우에서 사용할 환경 변수 정의하기
+
+워크플로우 파일에서 `env` 키를 사용하면 특정 범위에서만 사용할 수 있는 환경 변수를 설정할 수 있습니다. 이 경우 커스텀 변수의 범위는 환경 변수가 정의된 요소에 한정됩니다. 변수를 정의할 수 있는 범위는 다음과 같습니다.
+
+- 워크플로우 전체(워크플로우 파일 최상단)
+- 특정 job에서만 사용(`jobs.<job>.env`)
+- 특정 step에서만 사용(`jobs.<job>.steps.<step>.env`)
+
+```yaml
+name: Eating on a variable day
+on:
+  workflow_dispatch
+
+# 워크플로우 전체 환경 변수
+env:
+  DINNER_MENU: super green salad
+
+jobs:
+  eating_job:
+    runs-on: ubuntu-latest
+
+    # job 레벨 환경 변수
+    env:
+      GREETING: Bon Appetit
+      DINNER_MENU: extremely healthy poke
+
+    steps:
+      - name: "Eat well Minji, it's Friday!"
+        run: |
+          echo "${GREETING}, ${FIRST_NAME}! Today is you fav, ${DINNER_MENU}!"
+        # step 레벨 환경 변수
+        env:
+            FIRST_NAME: Bichon
+            DINNER_MENU: pepperoni pizza
+```
+
+위 워크플로우에서 GREETING, FIRST_NAME, DINNER_MENU에 각각 어떤 값이 들어갈까요?
+
+- GREETING: job 레벨에서 정의 → `"Bon Appetit"`
+- FIRST_NAME: step 레벨에서 정의 → `"Bichon"`
+- DINNER_MENU: 여러 레벨에서 정의됨 → **가장 가까운  값**(`pepperoni pizza`)**이 사용됨**
+
+결과는 다음과 같습니다.
+
+```bash
+Bon Apetite, Bichon! Today is your fav, pepperoni pizza!
+```
+
+이는 JavaScript의 스코프 개념과 유사합니다. 가장 가까운 범위의 변수가 우선 적용됩니다.
+
+<br />
+
+### 여러 워크플로우에서 사용할 설정 변수 정의하기
+
+여러 워크플로우에서 사용할 환경 변수를 **조직, 레포지토리, 환경 레벨에서 정의**할 수 있습니다.
+
+- **레포지토리 수준:** Settings > Secrets and variables > Actions > Variables
+- **조직 수준:** Organization Settings > Actions > Variables
+- 환경(Environment) 수준**:** Settings > Environments > Variables
+
+동일한 이름의 변수가 여러 레벨에서 정의될 경우, 가장 낮은 레벨의 변수가 우선순위를 갖습니다. 즉, 환경 변수 > 레포지토리 변수 > 조직 변수 순으로 최우선 적용됩니다.
+
+이 환경 변수는 아래와 같은 네이밍 규칙이 있습니다.
+
+- 이름은 알파벳 및 숫자(`[a-z]`, `[A-Z]`, `[0-9]`) 또는 언더스코어(`_`)  만을 포함해야 한다. 공백은 허용되지 않는다.
+- 이름은 `GITHUB_` 접두어로 시작하지 않는다.
+- 이름은 숫자로 시작하지 않는다.
+- 대소문자를 구분하지 않는다.
+- **생성하는 레벨에 한해 고유해야 한다.**
+
+대부분의 규칙은 직관적이지만, 마지막 규칙은 주의할 필요가 있습니다.
+
+E2E 테스트 워크플로우를 작성하면서, GitHub에서 E2E 전용 환경(Environement)을 생성하고 해당 환경에 `SOME_E2E_VAR`을 추가([참고](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment))한 적이 있습니다. 그리고`${{ vars.SOME_E2E_VAR }}`로 접근했지만 값이 비어있었습니다.
+
+문제는 어떤 환경(Environment)의 변수인지를 명시하지 않았다는 점이었습니다. GitHub Actions에서 같은 변수명이 여러 레벨에 존재할 수 있기 때문에 사용하려는 환경을 명확히 지정해야 합니다.
+
+```yaml
+jobs:
+  e2e-test:
+    runs-on: self-hosted
+    environment: playwright  # ✅정의한 환경을 명시
+    env:
+      E2E_VAR: ${{ vars.SOME_E2E_VAR }}
+```
+<br />
+
+### 러너 환경 변수 vs. context
+
+GitHub Actions에서 환경 변수를 참조하는 방법은 두 가지가 있습니다.
+
+| 사용 | 설명 | 사용 가능 위치 |
+| --- | --- | --- |
+| `${VAR_NAME}` | 러너에서 직접 실행  | run 단계에서만 사용 가능 |
+| `${{ env.VAR_NAME }}` | GitHub Actions의 context | YAML 전체에서 사용 가능 |
+1. 러너 환경 변수(`${VAR_NAME}`) → run 단계에서만 동작
+
+    run 단계에서는 `${VAR_NAME}`과 같이 일반적인 환경 변수 형식을 사용할 수 있습니다. 워크플로우 job이 러너 기기에 전송된 후에 러너에서 실제 환경 변수 값을 채우는 작업을 하기 때문에 러너에서 사용되는 쉘의 적절한 문법을 사용해야 합니다.
+
+    ```yaml
+    jobs:
+      hello-job:
+        runs-on: ubuntu-latest
+        env:
+          VAR_NAME: 1234
+        steps:
+          - name: Use runner environment variable
+            run: echo "${VAR_NAME}" # 1234
+    ```
+
+2. GitHub Actions의 context(`${{ vars.VAR_NAME }}`) → YAML 파일 전체에서 동작
+
+    ```yaml
+     jobs:
+       example-job:
+         runs-on: ubuntu-latest
+         env:
+           MY_VAR: 'true'
+
+         steps:
+           - name: This step runs only if MY_VAR is true
+             if: ${{ env.MY_VAR == 'true' }} # ✅ context 사용 필요
+             run: echo "${MY_VAR} is true"
+    ```
+
+    if, with, env 등의 YAML 문법에서는 `${VAR_NAME}`이 동작하지 않으므로 반드시 `${{ env.VAR_NAME }}`을 사용해야 합니다.
+
+
+
+왜 그런걸까요? 앞에서 살펴봤듯이 run 단계는 쉘에서 실행하며, 이 단계에서 환경 변수 값을 채워넣습니다. 조금 더 구체적으로 살펴보면 GitHub Actions는 쉘 환경을 아래와 같이 준비합니다.
+
+```shell
+export VAR_NAME="${{ env.VAR_NAME }}"
+```
+
+따라서 `${VAR_NAME}`에 접근하는 경우, 이미 변수가 정의되어 있기 때문에 사용이 가능합니다. 하지만, run 단계 외부에서 GitHub Actions는 쉘을 실행하지 않기 때문에 `${VAR_NAME}`이 존재하지 않습니다.
+
+다시 말해, run 단계에서는 러너 환경 변수 또는 GitHub Actions의 context 가운데 어떤 값을 사용해도 접근이 가능하지만, 러너에 전송되지 않는 YAML 스크립트에서는 변수값에 접근하기 위해 context를 사용해야합니다.
+
+:::note[GitHub Actions Context]
+Context는 보통 달러 사인과 대괄호를 사용(`${{ context.property }}`)함을 의미합니다. If문 내에서는 `${{`와 `}}` 가 선택 사항이지만, 사용했을 경우 전체 비교 구문을 닫아야 합니다.
+:::
+
+
+###나가며
+
+GitHub Actions의 환경 변수는 워크플로우 관리의 핵심 요소 중 하나입니다.
+
+✔ 하나의 워크플로우 내에서는 `env`키를 사용하여 환경 변수를 정의
+
+✔ 여러 워크플로우에서 공통 변수를 사용할 경우 GitHub UI에서 설정
+
+✔ `run`단계에서는 `${VAR_NAME}`, YAML 전체에서는 `${{ env.VAR_NAME }}`사용
+
+환경 변수를 적절히 활용하면 워크플로우의 유지보수성을 높이고, 반복적인 설정을 줄일 수 있습니다. 이 글이 GitHub Actions 환경 변수 개념을 정리하는 데 도움이 되었기를 바랍니다!
+
+<br />
+
+## REF
+
+[store-information-in-variables](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables)
+
+[managing-environments-for-deployment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)
