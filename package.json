@@ -12,7 +12,8 @@
     "serve": "docusaurus serve",
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "prepare": "cp scripts/pre-push.sh .git/hooks/pre-push 2>/dev/null && chmod +x .git/hooks/pre-push || true"
   },
   "dependencies": {
     "@docusaurus/core": "3.5.2",
@@ -46,5 +47,6 @@
   },
   "engines": {
     "node": ">=18.0"
-  }
+  },
+  "packageManager": "pnpm@11.1.3"
 }
