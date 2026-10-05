@@ -1,0 +1,234 @@
+---
+slug: 2024-11-24-svgRendering
+date: 2024-11-24T11:11
+title: "Why your SVG won't render: MIME types, headers, and a blob URL fix"
+description: "Your SVG file is valid, but an <img> element won't display it. Learn how the Content-Type header controls SVG rendering and how a blob URL works around it."
+tags: [frontend, svg]
+comments: true
+---
+
+## Introduction
+
+If you work on the frontend, you've probably run into SVG files at some point, whether you were adding a logo or using icons from a library. For example, if you add an icon from MUI (Material UI, a React component library), open DevTools, and click the icon, you'll see code like this:
+
+<img width="800" alt="Example SVG code" src="https://github.com/user-attachments/assets/87bd5809-2daa-4182-95c9-8a65b6643cae" />
+
+
+HTML provides elements for defining headings, images, tables, and more. In the same way, SVG provides elements for drawing shapes and paths. To define a shape, for example, SVG lets you specify coordinates, and together those coordinates form the right-pointing arrow in the following image.
+
+<img width="800" alt="Example MUI icon" src="https://github.com/user-attachments/assets/7da743f2-d73e-4ef8-9404-c5a0c2640304" />
+
+SVG covers everything from basic shapes like this to complex animations and interactions driven by JavaScript. That makes it fascinating to work with, and a powerful tool for frontend developers.
+
+Rendering SVG on the web isn't always straightforward, though. On a small project, I needed to render an SVG, and even though the file itself was fine, it didn't show up. This post walks step by step through the problems I hit rendering SVG with the `<img>` element, how I tracked down their causes, and the fix I landed on.
+
+
+
+<details>
+<summary>TL;DR</summary>
+
+    Common causes of SVG rendering failures
+    - The Content-Type in the HTTP headers is wrong. The values you need for rendering are `Content-Type: image/svg+xml` and `Content-Disposition: inline`.
+    - The CORS headers are wrong. Add your page's origin to the Access-Control-Allow-Origin header.
+    - The SVG structure is invalid.
+</details>
+
+<br />
+
+## Getting SVG to render
+
+### SVG basics
+
+- What is SVG (Scalable Vector Graphics)?
+
+    SVG is an XML-based markup language for describing vector graphics. It's mostly used for web graphics such as logos, illustrations, and charts. Here's a fun example worth sharing: [SVG Tutorial's basic shapes example](https://svg-tutorial.com/svg/basic-shapes) draws a clock in `<svg>` whose hands move as JavaScript updates the `rotate()` values for the hours, minutes, and seconds. The clock itself is built from only a few elements: the root `<svg>` element, `<circle>` for drawing the circle, `<text>` for displaying text, and `<g>` for grouping the `<line>` elements.
+
+    <img width="800" alt="SVG clock example" src="https://github.com/user-attachments/assets/be82b58d-0ab7-46be-87c1-3107c88c7177" />
+
+
+- Why use SVG?
+
+    Besides letting you apply scripts dynamically, as the earlier example showed, SVG has plenty of other advantages.
+
+  - Unlike raster files made of pixels, such as JPEG, vector graphics like SVG keep their quality when you resize them.
+  - SVG files are smaller than raster images, which are built from many colored pixels.
+  - An SVG image and its behavior are defined in an XML text file. That means you can edit it as text, and search engines like Google and screen readers can read it, which helps your site rank higher in search results.
+
+- Is SVG all upside?
+  - Without pixels, it isn't a good fit for high-quality digital photos. For photos rich in detail, JPEG is the better choice.
+  - The code inside an SVG image can be hard to understand.
+  - Rendering can be more complex than with raster files.
+
+Why is SVG harder to render than raster formats like JPEG or PNG? Because it's text. A raster file is binary data in a recognizable format, so the browser can identify and decode it even when the server sends inaccurate response headers. SVG is plain text, so the HTTP headers are the browser's only clue about how to interpret it, and the server has to label it correctly.
+
+<br />
+
+### What happened when I tried to render the SVG
+
+1. **Checked how the browser behaves**, following [[MDN] Basic properties of SVG files](https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorial/Getting_Started#basic_properties_of_svg_files)
+
+    <img width="1231" alt="Ways to embed SVG in HTML" src="https://github.com/user-attachments/assets/343fb856-03fb-4bc4-82f2-e88bf8394deb" />
+
+     - I tried rendering it as `<img src={svgUrl}>`, but the file failed to load and the alt text appeared instead.
+     - With `<object data={svgUrl}>` and `<iframe src={svgUrl}>`, it didn't render either, and the browser downloaded the file automatically. From this, I assumed the response's Content-Disposition header was `attachment`. (It wasn't.)
+
+2. **Checked whether the SVG file was valid**
+ - When I opened the downloaded file, it displayed correctly.
+ - To inspect the file's response headers, I ran `fetch(svgUrl)` in the DevTools console, but got a Content Security Policy (CSP) error.
+ - When I called `fetch(svgUrl)` in my code instead, I got the following error.
+
+      ```tsx
+      SyntaxError: Unexpected token < in JSON
+      ```
+
+  - SVG is XML-based, so trying to parse it as JSON throws an error. Instead, read the raw XML text with `response.text()`.
+
+:::note[What is raw text?]
+    Raw text is data that hasn't been parsed, transformed, or formatted. In web development, it usually refers to data fetched from a server or a file before an application uses or interprets it.
+
+    For example, the following SVG file is raw text. You can think of raw text as the file's contents as the browser receives them, before it parses them into a DOM tree or renders them.
+
+
+    ```tsx
+    <?xml version="1.0" encoding="UTF-8"?>
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">
+        <circle cx="50" cy="50" r="40" fill="red" />
+    </svg>
+    ```
+:::
+  - Or, if the response is XML, you can parse it with the `DOMParser` API.
+
+      ```tsx
+      const parser = new DOMParser()
+      const svgDocument = parser.parseFromString(svgText, "application/xml")
+      console.log(svgDocument)
+    ```
+
+3. **Examined the structure of the SVG file**
+
+     ```tsx
+     <?xml version="1.0" encoding="UTF-8"?>
+     <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+     <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="500" height="500" viewBox="0 0 500 500">
+       <defs>
+         <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+           <stop offset="0%" style="stop-color:rgb(255, 0, 150);stop-opacity:1" />
+           <stop offset="100%" style="stop-color:rgb(0, 150, 255);stop-opacity:1" />
+         </linearGradient>
+       </defs>
+       <rect x="0" y="0" width="500" height="500" fill="url(#gradient1)" />
+       <circle cx="250" cy="250" r="150" fill="white" />
+       <polygon points="250,100 310,400 190,400" fill="rgb(0, 150, 255)" />
+       <line x1="100" y1="250" x2="400" y2="250" stroke="rgb(255, 255, 255)" stroke-width="4" />
+     </svg>
+        ```
+
+ - Declares the document as XML version 1.0 and states that it uses US-ASCII character encoding
+
+    ```xml
+     <?xml version="1.0" encoding="US-ASCII"?>
+    ```
+ - Declares the document as an SVG file that uses the SVG 1.0 DTD (Document Type Definition), and gives the address of the official spec, `http://www.w3.org/…`
+
+     ```xml
+     <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+        ```
+    - The root `<svg>` element
+        - `xmlns`: defines the XML namespace for the SVG file, so elements and attributes are interpreted as SVG rather than generic XML.
+        - `xmlns:xlink`: provides the namespace for XLink, which is used to link to and reference external resources.
+        - `style`: inline styles to apply when the element is rendered.
+        - `<defs>`: a container for reusable elements such as gradients and patterns.
+        - `<g>`: groups several SVG elements so they can share common styles or transforms (translate, scale).
+
+
+     ```xml
+     <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="500" height="500" viewBox="0 0 500 500">
+       <defs><rect x="0" y="0" width="500" height="500" fill="url(#gradient1)" />
+       <circle cx="250" cy="250" r="150" fill="white" />
+       </defs>
+       <polygon points="250,100 310,400 190,400" fill="rgb(0, 150, 255)" />
+       <line x1="100" y1="250" x2="400" y2="250" stroke="rgb(255, 255, 255)" stroke-width="4" />
+     </svg>
+        ```
+
+ 4. **Checked the response headers**
+ - The response's Content-Type was `application/octet-stream`, and there was no Content-Disposition. **A quick search** showed that files uploaded to AWS S3 get `application/octet-stream` as their default type.
+ - When the Content-Type is `application/octet-stream`, most browsers treat the file as a generic binary stream and download it instead of rendering it.
+  - According to [MDN](https://developer.mozilla.org/en-US/docs/Web/HTTP/MIME_types), browsers use the MIME type, the media type declared in Content-Type, rather than the file extension to decide how to handle a URL. That's why it matters that a web server sends the correct MIME type in the response's Content-Type header. If the header isn't set correctly, the browser can misinterpret the file's contents, the site can misbehave, or downloaded files can be mishandled.
+
+5. **Used a `Blob` object**
+ - I couldn't change the server's response headers, so I used a `Blob` to get the browser to render the XML-based SVG.
+ - I created a binary object with the type `image/svg+xml`, generated a URL for it, and used that URL. The `type` option sets the blob's MIME type, and the browser uses it as the Content-Type when it loads the blob, whether through a blob URL or as an upload body. `URL.createObjectURL()` takes a `Blob` as its argument and creates a unique blob URL for it in the form `blob:<origin>/<uuid>`.
+
+      ```tsx
+      const svgBlob = new Blob([svgText], { type: 'image/svg+xml' })
+      const svgBlobUrl = URL.createObjectURL(svgBlob)
+
+      <img src={svgBlobUrl} alt={'SVG preview'} />
+        ```
+
+
+
+:::note[application/octet-stream]
+
+This is one of the most important MIME types for web developers to know, and it's the default for binary data. Because it stands for an "unknown" binary file, browsers usually don't execute it, or even ask whether it should be executed. For `application/octet-stream`, browsers behave as if the Content-Disposition header were set to `attachment`.
+
+Most web servers send resources they don't recognize with the `application/octet-stream` MIME type. For security reasons, browsers generally don't let you set a default action for such resources, like "Open in Word." The user has to save the file to disk to use it.
+
+:::
+
+<br />
+### Debugging SVG rendering problems
+
+Based on what I learned in the process, here's a step-by-step checklist for when an SVG won't render.
+
+1. **Check how the browser behaves**
+ - Enter the SVG's URL in a browser tab. If the file downloads instead of displaying, the response may have `Content-Disposition: attachment` or `Content-Type: application/octet-stream`.
+2. **Check the HTTP response headers**
+ - If the file itself is fine, open DevTools and check Content-Type, Content-Disposition, and Access-Control-Allow-Origin.
+  - If it doesn't render, check that Content-Type is `image/svg+xml`.
+  - If it downloads when you don't want it to, change Content-Disposition from `attachment` to `inline`.
+  - If you get a CORS error, check that your page's origin is included in Access-Control-Allow-Origin.
+
+    ```tsx
+      // Example server response headers
+      Content-Type image/svg+xml
+      Content-Disposition inline
+      Access-Control-Allow-Origin *
+        ```
+
+3. **Check that the SVG file is valid**
+ - Make sure the SVG structure is valid.
+4. **If you can't change the headers on the server, use a `Blob` object**
+ - Create a `Blob` object with the correct MIME type instead: fetch the SVG, wrap the text in a `Blob` of type `image/svg+xml`, and use its blob URL.
+
+     ```tsx
+     const svgBlob = new Blob([svgText], { type: 'image/svg+xml' })
+     const svgBlobUrl = URL.createObjectURL(svgBlob)
+
+     <img src={svgBlobUrl} alt={'SVG preview'} />
+        ```
+
+ - You can also inject the SVG straight into the HTML as inline SVG with `dangerouslySetInnerHTML`. But if the SVG is large or used in several places, referencing it by URL is more efficient.
+
+<br />
+## Wrapping up
+
+If an SVG won't render, start by checking Content-Type and Content-Disposition. If you can't modify the server's response, you can still render it with a `Blob`.
+
+Debugging this issue taught me how browsers handle SVG and HTTP headers. Understanding that behavior matters for frontend developers who want to handle files properly.
+
+You can also [override response headers locally in Chrome DevTools](https://developer.chrome.com/docs/devtools/overrides#override-headers) if you need to. And if you'd like to dig deeper into SVG, check out [SVG Tutorial](https://svg-tutorial.com/), an Advent calendar of 24 SVG examples :)
+
+<br />
+### References
+
+https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorial/Introduction
+
+https://developer.mozilla.org/en-US/docs/Web/SVG
+
+https://developer.mozilla.org/en-US/docs/Web/HTTP/MIME_types
+
+https://www.adobe.com/creativecloud/file-types/image/vector/svg-file.html
+
+https://medium.com/@benjamin.black/using-blob-from-svg-text-as-image-source-2a8947af7a8e

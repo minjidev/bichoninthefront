@@ -1,0 +1,61 @@
+---
+slug: 2025-01-05-it-works-on-my-computer-1
+date: 2025-01-05T18:00
+title: "It works on my machine #1: module not found during the build"
+description: "A Vite build passed locally but failed in GitHub Actions because a module couldn't be found. The culprit: a letter-case mismatch that only Linux caught."
+tags: [frontend, build, workflow, github-actions, troubleshooting]
+comments: true
+---
+
+## Introduction
+
+Have you ever had code that ran fine on your machine fail out of nowhere in CI? I recently tracked down a GitHub Actions failure caused by a difference between my local machine and the CI runner, and this post shares what I learned.
+
+## The problem
+
+The Vite build completed without issues locally, but the GitHub Actions workflow failed with an error saying it couldn't find a module (XX stands in for the module's name):
+
+> Error: Module XX not found during the build step
+
+The problem seemed to involve files generated dynamically during the build. On my machine, those generated files imported fine, so why was the build failing only in GitHub Actions?
+
+## Debugging
+
+1. Analyzing the error log
+    - According to the log, the build couldn't find one of the generated files.
+    - Those files were generated correctly on my machine, but they weren't generated in the CI/CD environment.
+
+2. Understanding how the files are generated
+    - A script generates these files dynamically during the build step.
+    - Git doesn't track them (they're listed in `.gitignore`), and each build environment produces its own copies. In other words, they aren't files I push from my machine.
+
+    At this point, I suspected something had gone wrong while the script ran.
+
+3. Pinpointing the file path issue
+
+    Reading through the generation script turned up the following:
+
+    - The file path passed to the script as input and the actual file name **differed in letter case**.
+    - For example, the script used the path `FileName.js`, but the file on disk was named `filename.js`.
+
+    These are clearly two different names, so how did my local build manage to find and import the file?
+
+4. How operating systems handle letter case in file paths
+
+    The root cause came down to how different operating systems treat file paths:
+
+    - **Local environment (macOS/Windows)**:
+      - By default, these operating systems use **case-insensitive** file systems, so they treat `FileName.js` and `filename.js` as the same file.
+    - **CI/CD environment (Linux)**:
+      - Linux file systems such as ext4 are **case-sensitive**. They see `FileName.js` and `filename.js` as two separate files, which led to the error.
+
+    That difference explains why everything worked locally while the CI/CD pipeline failed.
+
+### The fix
+
+- I updated the file generation script so the path it uses matches the actual file name's letter case exactly.
+- I also fixed the script swallowing errors that occurred while it ran. Now the script throws an exception and stops the build when something fails. This cut down debugging time and made problems quicker to spot.
+
+### Wrapping up
+
+This debugging session taught me that even a small difference between operating systems can break a build. To prevent this kind of problem, design your workflows with OS-specific differences in mind, and add error handling that surfaces failures quickly.

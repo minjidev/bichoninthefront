@@ -1,0 +1,227 @@
+---
+slug: 2025-02-16-github-actions-env
+date: 2025-02-16T23:13
+title: "Understanding environment variables in GitHub Actions"
+description: "How GitHub Actions scopes environment and configuration variables, which value wins, and when to use shell syntax versus the env context."
+tags: [workflow, github-actions, ci-cd]
+comments: true
+---
+
+## Introduction
+
+While writing an end-to-end (E2E) test workflow in GitHub Actions, I realized how confusing it can be that you can create and access environment variables at so many different levels. GitHub automatically sets default environment variables when a workflow runs, and on top of those, you can define your own custom variables at the workflow, job, and step level.
+
+This post walks through how to set and use environment variables, based on the official GitHub Actions documentation. It covers:
+
+- What variables are in GitHub Actions
+- The different scopes where you can define environment variables
+- How environment variables behave in `run` steps
+
+Along the way, it sorts out the concepts that are easy to mix up.
+
+## What are variables?
+
+Variables let you store and reuse non-sensitive configuration information, such as server names, specific paths, or usernames. In GitHub Actions, the runner fills in environment variable values in a `run` step before the command executes.
+
+- Example
+
+```yaml
+name: What To Eat
+on:
+  workflow_dispatch
+jobs:
+  eating_job:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Proudly say your dinner menu"
+        run: echo "Tonight's dinner is ${DINNER_MENU}!"
+        env:
+          DINNER_MENU: pepperoni pizza
+```
+
+- Output
+
+```shell
+Tonight's dinner is pepperoni pizza!
+```
+
+As this shows, environment variables let you plug values into a command when it runs.
+
+<br />
+
+## Setting environment variables
+
+Commands that run in a workflow can create, read, and modify variables. There are two main ways to set environment variables in GitHub Actions:
+
+1. Environment variables used **within a single workflow** → define them in the YAML file with the `env` key
+2. Configuration variables shared **across multiple workflows** → set them in the GitHub UI (at the repository, organization, or environment level)
+
+| Type | How to set it | Scope |
+| --- | --- | --- |
+| Environment variables | `env` key (workflow.yml) | Available only within a single workflow  |
+| Configuration variables | Set in the GitHub UI | Shared across multiple workflows  |
+
+People often call both of these "environment variables," but GitHub Docs distinguishes environment variables from configuration variables.
+
+### Defining environment variables for a single workflow
+
+The `env` key in a workflow file sets environment variables that are available only within a specific scope. A custom variable defined this way is limited to the element where you define it. You can define variables at these scopes:
+
+- The entire workflow (at the top level of the workflow file)
+- A specific job only (`jobs.<job>.env`)
+- A specific step only (`jobs.<job>.steps.<step>.env`)
+
+```yaml
+name: Eating on a variable day
+on:
+  workflow_dispatch
+
+# Workflow-level environment variable
+env:
+  DINNER_MENU: super green salad
+
+jobs:
+  eating_job:
+    runs-on: ubuntu-latest
+
+    # Job-level environment variables
+    env:
+      GREETING: Bon Appetit
+      DINNER_MENU: extremely healthy poke
+
+    steps:
+      - name: "Eat well Minji, it's Friday!"
+        run: |
+          echo "${GREETING}, ${FIRST_NAME}! Today is your fav, ${DINNER_MENU}!"
+        # Step-level environment variables
+        env:
+            FIRST_NAME: Bichon
+            DINNER_MENU: pepperoni pizza
+```
+
+What value do `GREETING`, `FIRST_NAME`, and `DINNER_MENU` each get in this workflow?
+
+- `GREETING`: defined at the job level → `"Bon Appetit"`
+- `FIRST_NAME`: defined at the step level → `"Bichon"`
+- `DINNER_MENU`: defined at several levels → **the closest value** (`pepperoni pizza`) **wins**
+
+Here's the result:
+
+```bash
+Bon Appetit, Bichon! Today is your fav, pepperoni pizza!
+```
+
+This works much like scope in JavaScript: the variable in the closest scope takes precedence.
+
+<br />
+
+### Defining configuration variables for multiple workflows
+
+To share variables across multiple workflows, you can **define them at the organization, repository, or environment level**.
+
+- **Repository level:** Settings > Secrets and variables > Actions > Variables
+- **Organization level:** Organization Settings > Actions > Variables
+- **Environment level:** Settings > Environments > Variables
+
+If a variable with the same name exists at more than one level, the one at the lowest level takes precedence: environment-level variables override repository-level variables, which override organization-level variables.
+
+These variables follow a few naming rules:
+
+- Names can contain only alphanumeric characters (`[a-z]`, `[A-Z]`, `[0-9]`) or underscores (`_`). Spaces aren't allowed.
+- Names must not start with the `GITHUB_` prefix.
+- Names must not start with a number.
+- Names are case-insensitive.
+- **Names must be unique at the level where they're created.**
+
+Most of these rules are intuitive, but the last one deserves attention.
+
+For my E2E test workflow, I created a dedicated deployment environment in GitHub and added `SOME_E2E_VAR` to it (see [Managing environments for deployment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)). I then read it with `${{ vars.SOME_E2E_VAR }}`, but the value came back empty.
+
+The problem was that I hadn't specified which environment the variable belonged to. Because the same variable name can exist at multiple levels in GitHub Actions, you have to name the environment you want to use.
+
+```yaml
+jobs:
+  e2e-test:
+    runs-on: self-hosted
+    environment: playwright  # ✅Specify the environment you defined
+    env:
+      E2E_VAR: ${{ vars.SOME_E2E_VAR }}
+```
+<br />
+
+### Runner environment variables vs. contexts
+
+There are two ways to reference environment variables in GitHub Actions.
+
+| Syntax | Description | Where you can use it |
+| --- | --- | --- |
+| `${VAR_NAME}` | Resolved directly on the runner  | Only in `run` steps |
+| `${{ env.VAR_NAME }}` | A GitHub Actions context | Anywhere in the YAML |
+1. Runner environment variables (`${VAR_NAME}`) → work only in `run` steps
+
+    In a `run` step, you can use the usual environment variable syntax, such as `${VAR_NAME}`. The runner fills in the actual values after the workflow job is sent to the runner machine, so you need to use the syntax of whichever shell the runner uses.
+
+    ```yaml
+    jobs:
+      hello-job:
+        runs-on: ubuntu-latest
+        env:
+          VAR_NAME: 1234
+        steps:
+          - name: Use runner environment variable
+            run: echo "${VAR_NAME}" # 1234
+    ```
+
+2. GitHub Actions contexts (`${{ env.VAR_NAME }}`) → work anywhere in the YAML file
+
+    ```yaml
+     jobs:
+       example-job:
+         runs-on: ubuntu-latest
+         env:
+           MY_VAR: 'true'
+
+         steps:
+           - name: This step runs only if MY_VAR is true
+             if: ${{ env.MY_VAR == 'true' }} # ✅ Requires a context
+             run: echo "${MY_VAR} is true"
+    ```
+
+    `${VAR_NAME}` doesn't work in YAML keys such as `if`, `with`, and `env`, so you must use `${{ env.VAR_NAME }}` there.
+
+
+
+Why is that? As covered earlier, a `run` step executes in a shell, and that's where the variables get their values. In effect, GitHub Actions prepares the shell environment like this:
+
+```shell
+export VAR_NAME="${{ env.VAR_NAME }}"
+```
+
+So when a command reads `${VAR_NAME}`, it works because the variable is already defined. Outside a `run` step, though, GitHub Actions doesn't start a shell, so `${VAR_NAME}` doesn't exist.
+
+Put another way, a `run` step can read a value through either a runner environment variable or a GitHub Actions context. In the parts of the YAML that never reach the runner as shell commands, you have to use a context to get at a variable's value.
+
+:::note[GitHub Actions contexts]
+You usually reference a context with a dollar sign and double curly braces (`${{ context.property }}`). Inside an `if` conditional, `${{` and `}}` are optional, but if you use them, they must wrap the entire comparison.
+:::
+
+
+## Wrapping up
+
+Environment variables are central to managing workflows in GitHub Actions.
+
+✔ Within a single workflow, define environment variables with the `env` key
+
+✔ For variables shared across multiple workflows, set them in the GitHub UI
+
+✔ Use `${VAR_NAME}` in `run` steps and `${{ env.VAR_NAME }}` anywhere in the YAML
+
+Used well, environment variables make workflows easier to maintain and cut down on repeated configuration. I hope this post helps clear up how they work in GitHub Actions.
+
+<br />
+
+## References
+
+[Store information in variables](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/store-information-in-variables)
+
+[Managing environments for deployment](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment)

@@ -1,0 +1,146 @@
+---
+slug: 2024-11-10-requestAnimationFrame
+date: 2024-11-10T09:12
+title: "Smooth animation in JavaScript with requestAnimationFrame()"
+description: "Learn how requestAnimationFrame() keeps animations in step with the display's refresh rate, and why time-based animation stays smooth when frames drop."
+tags: [frontend, javascript, three.js, animation]
+comments: true
+---
+
+
+## Introduction
+
+Have you ever been playing a racing game when your kart suddenly lurched off in the wrong direction? That happens when the frame rate drops or the animation timing falls out of sync.
+Browsers provide `requestAnimationFrame()` for this kind of problem. This post looks at how it lets you update an animation in step with the screen's refresh rate.
+
+:::note[What is refresh rate?]
+
+![news_image_20049](https://github.com/user-attachments/assets/03297df1-7d69-48d5-901e-4d210f653c04)
+
+- Refresh rate measures how many images a screen can display in one second. It's expressed in hertz (Hz).
+- A screen that redraws 60 times per second runs at 60Hz, and one that redraws 120 times runs at 120Hz. The higher the refresh rate, the less the screen flickers, so motion looks smoother and more continuous.
+- A low refresh rate causes [motion blur](https://www.youtube.com/watch?v=v1xlNFI5ip0&t=14s), where afterimages linger on the screen and tire your eyes. Today most TVs and monitors run at 60Hz or higher: high-refresh-rate TVs reach 120–144Hz, and gaming monitors go up to 240–360Hz.
+
+<b>REF</b>. [Display Terms.zip EP.15: Refresh Rate (Samsung Display Newsroom, in Korean)](https://news.samsungdisplay.com/34249?category=56&page=1&type=list)
+:::
+
+## `requestAnimationFrame()`
+
+`requestAnimationFrame()` is a JavaScript API for building smooth animations.
+The browser calls the callback you pass to `requestAnimationFrame()` before it repaints the screen, so the animation runs naturally at the screen's refresh rate. In other words, it lines up the moment the animation updates with the next repaint, as closely as possible.
+
+<br />
+
+### Why use `requestAnimationFrame()`?
+
+- Animation that matches the refresh rate
+
+    You've probably heard that an animation is really a series of still photos. In the browser, taking one photo corresponds to drawing the screen once. How many of those images the screen can show per second is the refresh rate.
+
+    `requestAnimationFrame()` guarantees that your JavaScript runs at the start of each frame, in step with the screen's refresh rate. That cuts down on CPU usage and makes animations smoother.
+
+- Pauses in the background
+
+In most browsers, `requestAnimationFrame()` pauses in background tabs, which saves resources, improves performance, and reduces battery drain.
+
+- Frame-independent animation
+
+    The timestamp passed to your callback lets you run time-based animations. Animation speed then stays constant even when frames drop or the refresh rate differs from one device to another.
+
+<br />
+
+### Frame-dependent vs. frame-independent animation
+
+- Frame-dependent animation
+
+The animation updates on every frame, but its speed changes whenever frames drop, which makes it hard to keep consistent.
+
+- Time-based (frame-independent) animation
+
+The animation updates based on the actual time that has passed, so it runs at the same speed regardless of the refresh rate. Even when frames drop, motion stays consistent and smooth.
+
+
+So which should you use? Most animations take the time-based approach, and it's especially important for animations that involve physics or need precise timing.
+
+
+> 🤔 If the animation is time-based, can't I use `setInterval()` instead?
+
+ `setInterval()` runs at a fixed interval, but its timing becomes irregular when the task queue is busy. `requestAnimationFrame()`, on the other hand, syncs updates with frames, so the animation keeps pace with what the display is actually doing and stays smooth.
+
+ More precisely, `setInterval()` queues its callback every N milliseconds, but the callback can sit in the task queue until the call stack empties, so it can't guarantee the interval you asked for. And even if the updates did land on that interval, they could fall between frames, out of step with the repaint, which makes motion stutter. `requestAnimationFrame()` instead lets you calculate the time elapsed between frames, so you can drive the animation by time no matter how many frames are drawn.
+
+ In short, even if a frame arrives late or gets dropped entirely, `requestAnimationFrame()` waits for the next repaint and runs your update just before it.
+
+
+<br />
+
+### Example: the animation loop in Three.js
+
+![Nov-02-2024 11-03-05](https://github.com/user-attachments/assets/c7e4d302-4dba-4dab-951a-43d57c74c74c)
+
+I've only recently started learning Three.js. There, the animation loop is the process of updating the state of objects in a scene and rendering the scene again and again to produce an animation like the preceding one.
+It works by calling the render function repeatedly with `requestAnimationFrame()`, the API covered earlier.
+
+On each frame, the animation loop does the following:
+
+- Calculates the elapsed time.
+- Updates position, rotation, or any other animated property based on that elapsed time.
+- Renders the scene from the camera's point of view to draw the next frame of the animation.
+
+Before the Three.js code, here's the same idea applied to moving a plain DOM element:
+
+```tsx
+// Timestamp of the last frame
+let lastTimestamp = 0
+
+const animate = (timestamp) => {
+	if (!lastTimestamp) lastTimestamp = timestamp
+
+    // Calculate elapsed time
+	const delta = (timestamp - lastTimestamp) / 1000
+	lastTimestamp = timestamp
+
+	// Calculate position based on elapsed time
+	const currentX = parseFloat(box.style.left) || 0
+	box.style.left = currentX + speed * delta + 'px'
+
+	// Request the next frame
+	requestAnimationFrame(animate)
+}
+
+requestAnimationFrame(animate)
+```
+
+Besides `requestAnimationFrame()`, Three.js offers other ways to build time-based animation.
+The `Clock` class tracks elapsed time for you, which makes time-based updates more straightforward. `getElapsedTime()` returns the total time since the clock started, and `getDelta()` returns the time since the previous call (the time between frames).
+
+```tsx
+// ... Create the canvas, scene, objects, camera, and renderer
+
+const clock = new THREE.Clock()
+
+// Time-based animation
+const tick = () =>
+{
+    // Calculate elapsed time
+    const elapsedTime = clock.getElapsedTime()
+
+    // Update objects
+    mesh.rotation.y = elapsedTime;
+
+    // Render
+    renderer.render(scene, camera)
+
+    // Call tick on the next frame
+    window.requestAnimationFrame(tick)
+}
+
+tick()
+```
+
+
+
+## Wrapping up
+
+While I was getting into Three.js, I naturally reached for `requestAnimationFrame()` to animate objects. Along the way, I learned that it's how you update an animation at the best possible moment in each frame.
+Later I realized it also applies to UI that updates rapidly during a resize. If you want better performance and smoothly rendered animations, try using `requestAnimationFrame()` where it fits.
