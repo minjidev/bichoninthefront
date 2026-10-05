@@ -7,7 +7,7 @@ const config: Config = {
     tagline: "Frontend Devloper Kimbichon's Blog",
     favicon: "img/favichon.ico",
 
-    url: "https://bichoninthefront.vercel.",
+    url: "https://bichoninthefront.vercel.app",
     baseUrl: "/",
 
     // GitHub pages deployment config.
@@ -26,14 +26,7 @@ const config: Config = {
         [
             "classic",
             {
-                docs: {
-                    sidebarPath: "./sidebars.ts",
-                    routeBasePath: "/docs",
-                    // Please change this to your repo.
-                    // Remove this to remove the "edit this page" links.
-                    // editUrl:
-                    //     "https://github.com/facebook/docusaurus/tree/main/packages/create-docusaurus/templates/shared/",
-                },
+                docs: false,
                 blog: {
                     routeBasePath: "/",
                     showReadingTime: true,
@@ -63,11 +56,6 @@ const config: Config = {
     themeConfig: {
         // Replace with your project's social card
         image: "img/docusaurus-social-card.jpg",
-        docs: {
-            sidebar: {
-                hideable: true,
-            },
-        },
         navbar: {
             title: "BichonIntheFront",
             // logo: {
