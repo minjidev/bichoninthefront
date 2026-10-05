@@ -1,0 +1,51 @@
+---
+import { GISCUS } from "../consts";
+---
+
+<div
+    class="giscus"
+    data-repo={GISCUS.repo}
+    data-repo-id={GISCUS.repoId}
+    data-category={GISCUS.category}
+    data-category-id={GISCUS.categoryId}
+>
+</div>
+
+<script>
+    // giscus is injected on the client so it starts with the current theme,
+    // then follows theme toggles via postMessage.
+    const GISCUS_ORIGIN = "https://giscus.app";
+    const giscusTheme = () =>
+        document.documentElement.dataset.theme === "light" ? "light_tritanopia" : "dark_tritanopia";
+
+    const container = document.querySelector<HTMLElement>(".giscus");
+    if (container) {
+        const { repo, repoId, category, categoryId } = container.dataset;
+        const script = document.createElement("script");
+        script.src = `${GISCUS_ORIGIN}/client.js`;
+        script.async = true;
+        script.crossOrigin = "anonymous";
+        Object.entries({
+            repo,
+            repoId,
+            category,
+            categoryId,
+            mapping: "pathname",
+            strict: "0",
+            reactionsEnabled: "1",
+            emitMetadata: "0",
+            inputPosition: "top",
+            theme: giscusTheme(),
+            lang: "ko",
+            loading: "lazy",
+        }).forEach(([key, value]) => {
+            if (value) script.dataset[key] = value;
+        });
+        container.append(script);
+
+        new MutationObserver(() => {
+            const frame = document.querySelector<HTMLIFrameElement>("iframe.giscus-frame");
+            frame?.contentWindow?.postMessage({ giscus: { setConfig: { theme: giscusTheme() } } }, GISCUS_ORIGIN);
+        }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    }
+</script>

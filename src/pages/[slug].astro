@@ -1,0 +1,90 @@
+---
+import { render } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Comments from "../components/Comments.astro";
+import { tagLabel } from "../consts";
+import { formatDate, getPostsByDate, readingMinutes, type Post } from "../lib/posts";
+
+export async function getStaticPaths() {
+    const posts = await getPostsByDate();
+    return posts.map((post, i) => ({
+        params: { slug: post.id },
+        props: { post, newer: posts[i - 1], older: posts[i + 1] },
+    }));
+}
+
+interface Props {
+    post: Post;
+    newer?: Post;
+    older?: Post;
+}
+
+const { post, newer, older } = Astro.props;
+const { Content, headings } = await render(post);
+const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+---
+
+<BaseLayout
+    title={post.data.title}
+    description={post.data.description}
+    image={post.data.image?.src}
+    type="article"
+    publishedTime={post.data.date}
+    tags={post.data.tags}
+>
+    <div class="post-layout">
+        <article class="post">
+            <header class="post-header">
+                <h1>{post.data.title}</h1>
+                <div class="post-meta">
+                    <time datetime={post.data.date.toISOString()}>{formatDate(post.data.date)}</time>
+                    <span>· {readingMinutes(post.body)}분 읽기</span>
+                </div>
+                <div class="post-meta">
+                    {post.data.tags.map((tag) => <a class="tag" href={`/tags/${tag}`}>{tagLabel(tag)}</a>)}
+                </div>
+            </header>
+            {
+                toc.length > 0 && (
+                    <details class="toc-mobile">
+                        <summary>목차</summary>
+                        <ul>
+                            {toc.map((h) => (
+                                <li class={`depth-${h.depth}`}>
+                                    <a href={`#${h.slug}`}>{h.text}</a>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                )
+            }
+            <div class="prose">
+                <Content />
+            </div>
+            <nav class="post-nav" aria-label="이전/다음 글">
+                {older ? <a href={`/${older.id}`}><small>이전 글</small>{older.data.title}</a> : <span />}
+                {newer && <a class="next" href={`/${newer.id}`}><small>다음 글</small>{newer.data.title}</a>}
+            </nav>
+            {post.data.comments && (
+                <section class="comments" aria-labelledby="comments-title">
+                    <h2 id="comments-title" class="comments-title">댓글</h2>
+                    <Comments />
+                </section>
+            )}
+        </article>
+        {
+            toc.length > 0 && (
+                <aside class="toc" aria-label="목차">
+                    <p class="toc-title">목차</p>
+                    <ul>
+                        {toc.map((h) => (
+                            <li class={`depth-${h.depth}`}>
+                                <a href={`#${h.slug}`}>{h.text}</a>
+                            </li>
+                        ))}
+                    </ul>
+                </aside>
+            )
+        }
+    </div>
+</BaseLayout>
