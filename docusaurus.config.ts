@@ -4,8 +4,8 @@ import type * as Preset from "@docusaurus/preset-classic";
 
 const config: Config = {
     title: "bichoninthefront",
-    tagline: "Frontend Devloper Kimbichon's Blog",
-    favicon: "img/favichon.ico",
+    tagline: "Frontend Developer Kimbichon's Blog",
+    favicon: "img/favicon.ico",
 
     url: "https://bichoninthefront.vercel.app",
     baseUrl: "/",
@@ -124,7 +124,7 @@ const config: Config = {
                 //     ],
                 // },
             ],
-            copyright: `Copyright © 2024 BichonInthFront. Built with Docusaurus.`,
+            copyright: `Copyright © 2024 BichonIntheFront. Built with Docusaurus.`,
         },
         prism: {
             theme: prismThemes.github,
