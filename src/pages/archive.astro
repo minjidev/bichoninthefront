@@ -1,0 +1,28 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { formatMonthDay, getPostsByDate, yearOf } from "../lib/posts";
+
+const posts = await getPostsByDate();
+const years = Map.groupBy(posts, (post) => yearOf(post.data.date));
+---
+
+<BaseLayout title="Archive" description="전체 글 목록">
+    <h1 class="page-title">Archive</h1>
+    {
+        [...years].map(([year, items]) => (
+            <section class="archive-year">
+                <h2>{year}</h2>
+                <ul>
+                    {items.map((post) => (
+                        <li>
+                            <time datetime={post.data.date.toISOString()}>
+                                {formatMonthDay(post.data.date)}
+                            </time>
+                            <a href={`/${post.id}`}>{post.data.title}</a>
+                        </li>
+                    ))}
+                </ul>
+            </section>
+        ))
+    }
+</BaseLayout>
