@@ -1,0 +1,21 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PostList from "../components/PostList.astro";
+import { SITE } from "../consts";
+import { localePath, type Locale } from "../i18n/ui";
+import type { Post } from "../lib/posts";
+
+interface Props {
+    locale: Locale;
+    posts: Post[];
+}
+const { locale, posts } = Astro.props;
+---
+
+<BaseLayout locale={locale} alternates={{ ko: localePath("ko", "/"), en: localePath("en", "/") }}>
+    <section class="hero">
+        <h1>{SITE.title}</h1>
+        <p>{SITE.description}</p>
+    </section>
+    <PostList posts={posts} locale={locale} />
+</BaseLayout>

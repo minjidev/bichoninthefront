@@ -1,16 +1,8 @@
 ---
-import BaseLayout from "../layouts/BaseLayout.astro";
-import PostList from "../components/PostList.astro";
-import { SITE } from "../consts";
+import HomeView from "../views/HomeView.astro";
 import { getPosts } from "../lib/posts";
 
-const posts = await getPosts();
+const posts = await getPosts("ko");
 ---
 
-<BaseLayout>
-    <section class="hero">
-        <h1>{SITE.title}</h1>
-        <p>{SITE.description}</p>
-    </section>
-    <PostList posts={posts} />
-</BaseLayout>
+<HomeView locale="ko" posts={posts} />

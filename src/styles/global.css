@@ -115,18 +115,42 @@ img {
     color: var(--accent);
     font-size: 1.1rem;
 }
-.site-header nav {
+.main-nav {
     display: flex;
     align-items: center;
     gap: 16px;
+    margin-left: auto;
     font-size: 0.95rem;
     flex-wrap: wrap;
 }
-.site-header nav a {
+.main-nav a {
     color: var(--text-muted);
 }
-.site-header nav a:hover {
+.main-nav a:hover {
     color: var(--text);
+    text-decoration: none;
+}
+/* Site-wide settings (language, theme), visually separated from navigation */
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+}
+.lang-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text);
+    font-size: 0.85rem;
+}
+.lang-switch:hover {
+    border-color: var(--link);
     text-decoration: none;
 }
 .theme-toggle {
@@ -181,6 +205,9 @@ img {
 .hero p {
     margin: 4px 0 0;
     color: var(--text-muted);
+}
+.translation-link {
+    color: var(--link);
 }
 .page-title {
     margin: 48px 0 24px;
@@ -554,9 +581,18 @@ img {
         gap: 4px 12px;
         padding-block: 10px;
     }
-    .site-header nav {
+    .main-nav {
+        order: 3;
+        flex-basis: 100%;
         gap: 12px;
+        margin-left: 0;
         font-size: 0.875rem;
+    }
+    .header-actions {
+        order: 2;
+        margin-left: auto;
+        padding-left: 0;
+        border-left: 0;
     }
     .post-header h1 {
         font-size: 1.7rem;

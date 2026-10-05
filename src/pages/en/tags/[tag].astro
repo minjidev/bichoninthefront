@@ -1,0 +1,11 @@
+---
+import TagPostsView from "../../../views/TagPostsView.astro";
+import { getPosts, getTags } from "../../../lib/posts";
+
+export async function getStaticPaths() {
+    const tags = getTags(await getPosts("en"));
+    return [...tags].map(([tag, posts]) => ({ params: { tag }, props: { tag, posts } }));
+}
+---
+
+<TagPostsView locale="en" {...Astro.props} />

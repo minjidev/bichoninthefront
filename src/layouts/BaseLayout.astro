@@ -1,6 +1,7 @@
 ---
 import "../styles/global.css";
 import { SITE, SOCIALS } from "../consts";
+import { DEFAULT_LOCALE, LOCALE_META, LOCALES, localePath, t, type Locale } from "../i18n/ui";
 
 interface Props {
     title?: string;
@@ -11,6 +12,9 @@ interface Props {
     tags?: string[];
     /** Exclude from search engines (e.g. 404). */
     noindex?: boolean;
+    locale?: Locale;
+    /** URLs of this page in each available locale (for hreflang and the language switcher). */
+    alternates?: Partial<Record<Locale, string>>;
 }
 
 const {
@@ -21,7 +25,12 @@ const {
     publishedTime,
     tags = [],
     noindex = false,
+    locale = DEFAULT_LOCALE,
+    alternates = {},
 } = Astro.props;
+const otherLocale: Locale = locale === "ko" ? "en" : "ko";
+const switchHref = alternates[otherLocale] ?? localePath(otherLocale, "/");
+const hreflangs = LOCALES.filter((l) => alternates[l]).map((l) => ({ lang: LOCALE_META[l].htmlLang, href: new URL(alternates[l]!, Astro.site) }));
 const pageTitle = title ? `${title} | ${SITE.title}` : SITE.title;
 const pathname = Astro.url.pathname.replace(/(.)\/$/, "$1");
 const canonical = new URL(pathname, Astro.site);
@@ -36,25 +45,25 @@ const jsonLd =
               description,
               image: imageUrl.href,
               datePublished: publishedTime?.toISOString(),
-              inLanguage: SITE.locale,
+              inLanguage: LOCALE_META[locale].htmlLang,
               keywords: tags.join(", ") || undefined,
               author: { "@type": "Person", name: SITE.author, url: new URL("/aboutme", Astro.site).href },
               mainEntityOfPage: canonical.href,
           }
-        : pathname === "/"
+        : pathname === localePath(locale, "/")
           ? {
                 "@context": "https://schema.org",
                 "@type": "WebSite",
                 name: SITE.title,
                 description: SITE.description,
                 url: canonical.href,
-                inLanguage: SITE.locale,
+                inLanguage: LOCALE_META[locale].htmlLang,
             }
           : null;
 ---
 
 <!doctype html>
-<html lang={SITE.locale} data-theme="dark">
+<html lang={LOCALE_META[locale].htmlLang} data-theme="dark">
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -63,12 +72,20 @@ const jsonLd =
         {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
         <link rel="icon" href="/favicon.ico" />
         <link rel="sitemap" href="/sitemap-index.xml" />
-        <link rel="alternate" type="application/rss+xml" title={SITE.title} href="/rss.xml" />
+        <link rel="alternate" type="application/rss+xml" title={t(locale, "rssTitle")} href={localePath(locale, "/rss.xml")} />
+        {
+            hreflangs.length > 1 && (
+                <>
+                    {hreflangs.map(({ lang, href }) => <link rel="alternate" hreflang={lang} href={href} />)}
+                    <link rel="alternate" hreflang="x-default" href={new URL(alternates[DEFAULT_LOCALE]!, Astro.site)} />
+                </>
+            )
+        }
         <meta name="generator" content={Astro.generator} />
 
         <meta property="og:type" content={type} />
         <meta property="og:site_name" content={SITE.title} />
-        <meta property="og:locale" content="ko_KR" />
+        <meta property="og:locale" content={LOCALE_META[locale].ogLocale} />
         <meta property="og:title" content={title ?? SITE.title} />
         <meta property="og:description" content={description} />
         <meta property="og:url" content={canonical} />
@@ -92,16 +109,35 @@ const jsonLd =
         </script>
     </head>
     <body>
-        <a class="skip-link" href="#main">본문으로 건너뛰기</a>
+        <a class="skip-link" href="#main">{t(locale, "skipToContent")}</a>
         <header class="site-header">
             <div class="container header-inner">
-                <a class="site-title" href="/">{SITE.title}</a>
-                <nav aria-label="주요 메뉴">
-                    <a href="/tags">Tags</a>
-                    <a href="/archive">Archive</a>
+                <a class="site-title" href={localePath(locale, "/")}>{SITE.title}</a>
+                <nav class="main-nav" aria-label={t(locale, "mainNav")}>
+                    <a href={localePath(locale, "/tags")}>Tags</a>
+                    <a href={localePath(locale, "/archive")}>Archive</a>
                     <a href="/aboutme">About Me</a>
                     <a href={SOCIALS.linkedin} target="_blank" rel="noopener">LinkedIn</a>
-                    <button class="theme-toggle" type="button" aria-label="다크 모드" aria-pressed="true">
+                </nav>
+                <div class="header-actions">
+                    <a
+                        class="lang-switch"
+                        href={switchHref}
+                        hreflang={LOCALE_META[otherLocale].htmlLang}
+                        lang={LOCALE_META[otherLocale].htmlLang}
+                    >
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                            <path
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.8"
+                                d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9M12 3c-2.5 2.6-3.8 5.6-3.8 9s1.3 6.4 3.8 9"
+                            ></path>
+                        </svg>
+                        {LOCALE_META[otherLocale].label}
+                    </a>
+                    <button class="theme-toggle" type="button" aria-label={t(locale, "themeToggle")} aria-pressed="true">
                         <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
                             <path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"></path>
                         </svg>
@@ -115,7 +151,7 @@ const jsonLd =
                             ></path>
                         </svg>
                     </button>
-                </nav>
+                </div>
             </div>
         </header>
         <main id="main" class="container">
@@ -124,10 +160,10 @@ const jsonLd =
         <footer class="site-footer">
             <div class="container footer-inner">
                 <span>© {new Date().getFullYear()} {SITE.title}. Built with Astro.</span>
-                <nav aria-label="외부 링크">
+                <nav aria-label={t(locale, "externalLinks")}>
                     <a href={SOCIALS.github} target="_blank" rel="noopener">GitHub</a>
                     <a href={SOCIALS.linkedin} target="_blank" rel="noopener">LinkedIn</a>
-                    <a href="/rss.xml">RSS</a>
+                    <a href={localePath(locale, "/rss.xml")}>RSS</a>
                 </nav>
             </div>
         </footer>

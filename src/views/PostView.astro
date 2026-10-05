@@ -1,0 +1,95 @@
+---
+import { render } from "astro:content";
+import BaseLayout from "../layouts/BaseLayout.astro";
+import Comments from "../components/Comments.astro";
+import { tagLabel } from "../consts";
+import { localePath, minRead, t, type Locale } from "../i18n/ui";
+import { formatDate, getTranslation, localeOf, postUrl, readingMinutes, type Post } from "../lib/posts";
+
+interface Props {
+    post: Post;
+    newer?: Post;
+    older?: Post;
+}
+
+const { post, newer, older } = Astro.props;
+const locale: Locale = localeOf(post);
+const translation = await getTranslation(post);
+const alternates = translation ? { [locale]: postUrl(post), [localeOf(translation)]: postUrl(translation) } : {};
+const { Content, headings } = await render(post);
+const toc = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+---
+
+<BaseLayout
+    locale={locale}
+    alternates={alternates}
+    title={post.data.title}
+    description={post.data.description}
+    image={post.data.image?.src}
+    type="article"
+    publishedTime={post.data.date}
+    tags={post.data.tags}
+>
+    <div class="post-layout">
+        <article class="post">
+            <header class="post-header">
+                <h1>{post.data.title}</h1>
+                <div class="post-meta">
+                    <time datetime={post.data.date.toISOString()}>{formatDate(post.data.date, locale)}</time>
+                    <span>· {minRead(locale, readingMinutes(post.body))}</span>
+                    {
+                        translation && (
+                            <a class="translation-link" href={postUrl(translation)} hreflang={localeOf(translation)} lang={localeOf(translation)}>
+                                · {localeOf(translation) === "en" ? "Read in English" : "한국어로 읽기"}
+                            </a>
+                        )
+                    }
+                </div>
+                <div class="post-meta">
+                    {post.data.tags.map((tag) => <a class="tag" href={localePath(locale, `/tags/${tag}`)}>{tagLabel(tag)}</a>)}
+                </div>
+            </header>
+            {
+                toc.length > 0 && (
+                    <details class="toc-mobile">
+                        <summary>{t(locale, "toc")}</summary>
+                        <ul>
+                            {toc.map((h) => (
+                                <li class={`depth-${h.depth}`}>
+                                    <a href={`#${h.slug}`}>{h.text}</a>
+                                </li>
+                            ))}
+                        </ul>
+                    </details>
+                )
+            }
+            <div class="prose">
+                <Content />
+            </div>
+            <nav class="post-nav" aria-label={t(locale, "postNav")}>
+                {older ? <a href={postUrl(older)}><small>{t(locale, "prev")}</small>{older.data.title}</a> : <span />}
+                {newer && <a class="next" href={postUrl(newer)}><small>{t(locale, "next")}</small>{newer.data.title}</a>}
+            </nav>
+            {post.data.comments && (
+                <section class="comments" aria-labelledby="comments-title">
+                    <h2 id="comments-title" class="comments-title">{t(locale, "comments")}</h2>
+                    <Comments locale={locale} />
+                </section>
+            )}
+        </article>
+        {
+            toc.length > 0 && (
+                <aside class="toc" aria-label={t(locale, "toc")}>
+                    <p class="toc-title">{t(locale, "toc")}</p>
+                    <ul>
+                        {toc.map((h) => (
+                            <li class={`depth-${h.depth}`}>
+                                <a href={`#${h.slug}`}>{h.text}</a>
+                            </li>
+                        ))}
+                    </ul>
+                </aside>
+            )
+        }
+    </div>
+</BaseLayout>

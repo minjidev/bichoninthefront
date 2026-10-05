@@ -1,0 +1,30 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import PostList from "../components/PostList.astro";
+import { tagLabel } from "../consts";
+import { localePath, t, tagPageDescription, type Locale } from "../i18n/ui";
+import { getPosts, type Post } from "../lib/posts";
+
+interface Props {
+    locale: Locale;
+    tag: string;
+    posts: Post[];
+}
+const { locale, tag, posts } = Astro.props;
+const label = tagLabel(tag);
+const other: Locale = locale === "ko" ? "en" : "ko";
+const otherHasTag = (await getPosts(other)).some((p) => p.data.tags.includes(tag));
+const path = `/tags/${tag}`;
+const alternates = otherHasTag ? { [locale]: localePath(locale, path), [other]: localePath(other, path) } : {};
+---
+
+<BaseLayout
+    locale={locale}
+    alternates={alternates}
+    title={`#${label}`}
+    description={tagPageDescription(locale, label, posts.length)}
+>
+    <h1 class="page-title">#{label} <span class="count">{posts.length}</span></h1>
+    <PostList posts={posts} locale={locale} />
+    <p><a href={localePath(locale, "/tags")}>{t(locale, "allTags")}</a></p>
+</BaseLayout>
