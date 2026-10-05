@@ -53,6 +53,10 @@ comments: true
 - `:::note[제목]` ... `:::` 형식의 안내 박스(note, tip, info, warning, danger)를 쓸 수 있습니다.
 - 코드 블록에서 `// highlight-next-line`으로 강조, `// error-next-line` 또는 `# error-start` ~ `# error-end`로 에러 라인을 표시할 수 있습니다.
 
+### 영어 글
+
+번역본은 같은 폴더에 `index.en.mdx`로 두면 `/en/<slug>`에 게시되고, 원문과 번역본이 서로 링크됩니다. 번역 원칙과 용어집은 [`docs/translation-guide.md`](docs/translation-guide.md)에 있습니다.
+
 ### 배포
 
 `main` 브랜치에 push하면 Vercel이 자동으로 빌드·배포합니다. push 전에 pre-push 훅이 `pnpm install --frozen-lockfile`로 lockfile과 `package.json`의 일치 여부를 확인합니다.
@@ -107,6 +111,10 @@ Body
 - The frontmatter schema lives in `src/content.config.ts`; tag display names live in `src/consts.ts`.
 - Admonitions use `:::note[Title]` ... `:::` (note, tip, info, warning, danger).
 - In code blocks, use `// highlight-next-line` to highlight a line, and `// error-next-line` or `# error-start` … `# error-end` to mark error lines.
+
+### English posts
+
+Put a translation next to the original as `index.en.mdx`; it is published at `/en/<slug>` and linked with the Korean post. See [`docs/translation-guide.md`](docs/translation-guide.md) for the style guide and glossary.
 
 ### Deployment
 

@@ -27,5 +27,11 @@ export default defineConfig({
             transformers: [transformerLineMarkers()],
         },
     },
-    integrations: [mdx(), sitemap({ filter: (page) => !page.includes("/404") })],
+    integrations: [
+        mdx(),
+        sitemap({
+            filter: (page) => !page.includes("/404"),
+            i18n: { defaultLocale: "ko", locales: { ko: "ko-KR", en: "en-US" } },
+        }),
+    ],
 });

@@ -1,5 +1,11 @@
 ---
 import { GISCUS } from "../consts";
+import type { Locale } from "../i18n/ui";
+
+interface Props {
+    locale?: Locale;
+}
+const { locale = "ko" } = Astro.props;
 ---
 
 <div
@@ -8,6 +14,7 @@ import { GISCUS } from "../consts";
     data-repo-id={GISCUS.repoId}
     data-category={GISCUS.category}
     data-category-id={GISCUS.categoryId}
+    data-lang={locale}
 >
 </div>
 
@@ -20,7 +27,7 @@ import { GISCUS } from "../consts";
 
     const container = document.querySelector<HTMLElement>(".giscus");
     if (container) {
-        const { repo, repoId, category, categoryId } = container.dataset;
+        const { repo, repoId, category, categoryId, lang } = container.dataset;
         const script = document.createElement("script");
         script.src = `${GISCUS_ORIGIN}/client.js`;
         script.async = true;
@@ -36,7 +43,7 @@ import { GISCUS } from "../consts";
             emitMetadata: "0",
             inputPosition: "top",
             theme: giscusTheme(),
-            lang: "ko",
+            lang: lang ?? "ko",
             loading: "lazy",
         }).forEach(([key, value]) => {
             if (value) script.dataset[key] = value;

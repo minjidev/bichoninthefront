@@ -9,8 +9,16 @@ const kstDate = z.preprocess((value) => {
 }, z.coerce.date());
 
 const blog = defineCollection({
-    // `slug` in frontmatter becomes the entry id, so existing URLs are preserved.
-    loader: glob({ pattern: "**/index.mdx", base: "./src/content/blog" }),
+    // Korean: `<folder>/index.mdx`, English translation: `<folder>/index.en.mdx`.
+    // The frontmatter `slug` becomes the id (so existing URLs are preserved); English ids get an `en/` prefix.
+    loader: glob({
+        pattern: ["**/index.mdx", "**/index.en.mdx"],
+        base: "./src/content/blog",
+        generateId: ({ entry, data }) => {
+            const slug = typeof data.slug === "string" ? data.slug.replace(/^\/+/, "") : entry.split("/")[0];
+            return entry.endsWith(".en.mdx") ? `en/${slug}` : slug;
+        },
+    }),
     schema: ({ image }) =>
         z.object({
             title: z.string(),

@@ -1,0 +1,36 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { localePath, t, type Locale } from "../i18n/ui";
+import { formatMonthDay, getPostsByDate, postUrl, yearOf } from "../lib/posts";
+
+interface Props {
+    locale: Locale;
+}
+const { locale } = Astro.props;
+const posts = await getPostsByDate(locale);
+const years = Map.groupBy(posts, (post) => yearOf(post.data.date));
+---
+
+<BaseLayout
+    locale={locale}
+    alternates={{ ko: localePath("ko", "/archive"), en: localePath("en", "/archive") }}
+    title="Archive"
+    description={t(locale, "archiveDescription")}
+>
+    <h1 class="page-title">Archive</h1>
+    {
+        [...years].map(([year, items]) => (
+            <section class="archive-year">
+                <h2>{year}</h2>
+                <ul>
+                    {items.map((post) => (
+                        <li>
+                            <time datetime={post.data.date.toISOString()}>{formatMonthDay(post.data.date, locale)}</time>
+                            <a href={postUrl(post)}>{post.data.title}</a>
+                        </li>
+                    ))}
+                </ul>
+            </section>
+        ))
+    }
+</BaseLayout>

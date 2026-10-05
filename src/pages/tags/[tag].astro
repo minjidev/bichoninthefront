@@ -1,21 +1,11 @@
 ---
-import BaseLayout from "../../layouts/BaseLayout.astro";
-import PostList from "../../components/PostList.astro";
-import { tagLabel } from "../../consts";
-import { getPosts, getTags, type Post } from "../../lib/posts";
+import TagPostsView from "../../views/TagPostsView.astro";
+import { getPosts, getTags } from "../../lib/posts";
 
 export async function getStaticPaths() {
-    const tags = getTags(await getPosts());
-    return [...tags].map(([tag, posts]) => ({ params: { tag }, props: { posts } }));
+    const tags = getTags(await getPosts("ko"));
+    return [...tags].map(([tag, posts]) => ({ params: { tag }, props: { tag, posts } }));
 }
-
-const { tag } = Astro.params;
-const { posts } = Astro.props as { posts: Post[] };
-const label = tagLabel(tag);
 ---
 
-<BaseLayout title={`#${label}`} description={`${label} 태그가 달린 글 ${posts.length}편`}>
-    <h1 class="page-title">#{label} <span class="count">{posts.length}</span></h1>
-    <PostList posts={posts} />
-    <p><a href="/tags">← 모든 태그</a></p>
-</BaseLayout>
+<TagPostsView locale="ko" {...Astro.props} />
