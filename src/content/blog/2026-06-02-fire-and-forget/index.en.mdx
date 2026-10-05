@@ -1,0 +1,202 @@
+---
+slug: fire-and-forget
+date: 2026-06-02T10:00
+title: "The fire-and-forget pattern: who owns the failure when you skip await?"
+description: "A promise you don't await can still reject, and then nothing handles it. Learn how an SDK can ignore the failure, record it, or report it to the host."
+tags: [frontend, javascript]
+comments: true
+---
+
+## Which promises don't need to be awaited?
+
+```tsx
+async function generateImage(prompt: string) {
+  const job = await createJob(prompt) // 1. Create a job and get its id
+  const result = await pollUntilDone(job.id) // 2. Poll until the job is done
+
+  await sendTelemetry('image_generated', { jobId: job.id }) // 3. Send telemetry
+
+  return result
+}
+```
+
+Say an AI image generation SDK has a function like this.
+
+Does the `await` in front of `sendTelemetry` need to be there?
+
+If the answer isn't obvious, try framing the question another way:
+
+> Before this function returns a result to the caller, which of these three calls does it actually need to wait for?
+
+The test is whether a failure in each call means image generation failed.
+
+If `createJob` fails, there's no job id. If `pollUntilDone` fails, there's no image. Both steps are part of producing the result. `sendTelemetry` is different: even if it fails, the image already exists, and the function still has a `result` to return. You can skip awaiting a call like this so it doesn't hold up the user.
+
+Starting an async operation without waiting for its outcome is commonly called the **fire-and-forget pattern**. This post focuses on one form of it: calling a function that returns a promise and not awaiting it.
+
+```tsx
+sendTelemetry() // Async function: returns a promise, not awaited
+console.log('continued')
+```
+
+If that promise rejects, the error doesn't vanish. It lingers as an unhandled promise rejection.
+
+If you maintain an SDK, there's more to consider. Every host (the page or app that embeds the SDK) deals with `unhandledrejection` in its own way, and the SDK can't tell which kind of host it's running in.
+
+## Where does the failure of an un-awaited promise go?
+
+This matters for SDKs because the same code can behave differently depending on how the host handles global errors. Start with the simplest possible example:
+
+```tsx
+async function sendTelemetry() {
+  throw new Error('analytics endpoint down')
+}
+
+sendTelemetry()
+console.log('continued')
+```
+
+I ran this snippet in the console of a Vite app, google.com, and claude.ai, and got different results.
+
+| Environment | `unhandledrejection` listener | Calls `preventDefault()` | Console error |
+| --- | --- | --- | --- |
+| Vite dev | ❌ | ❌ | Yes |
+| google.com | 🟢 | 🟢 | No |
+| claude.ai | 🟢 | ❌ | Yes |
+
+**Vite dev**: no handler, so the error is printed as is.
+
+```bash
+continued
+# error-start
+Uncaught (in promise) Error: analytics endpoint down
+  at sendTelemetry (<anonymous>:2:9)
+  at <anonymous>:5:1
+# error-end
+```
+
+**google.com**: the handler calls `preventDefault()`, so nothing shows up.
+
+```bash
+continued
+```
+
+**claude.ai**: there's a handler, but it doesn't call `preventDefault()`, so the error appears.
+
+```bash
+continued
+# error-start
+Uncaught (in promise) Error: analytics endpoint down
+  at sendTelemetry (<anonymous>:2:9)
+  at <anonymous>:5:1
+# error-end
+```
+
+The code was identical, but the results weren't. What differs is how each page handles the `unhandledrejection` event.
+
+When a promise rejects and has no rejection handler (attached with `.catch()` or passed as the second argument to `.then()`), the browser fires an `unhandledrejection` event. Unless a listener cancels the event, the browser performs the default action: it logs the error to the console, as in the Vite dev app.
+
+Why didn't google.com show the error, then? Its global handler calls `preventDefault()`, which appears to be what suppresses the console output.
+
+MDN describes logging to the console as the default action of the `unhandledrejection` event, and says you can prevent it with `event.preventDefault()`.
+
+This behavior varies across browsers, though. Contrary to the spec, Firefox still prints the error even when `preventDefault()` is called ([Mozilla Bugzilla #1642147](https://bugzilla.mozilla.org/show_bug.cgi?id=1642147)). I ran these tests in Chrome.
+
+If the host has a global handler and calls `preventDefault()` the way google.com does, does the SDK need to do anything at all? It depends.
+
+Even if google.com passes `event.reason` to some internal function after calling `preventDefault()`, the SDK author can't see what that function does, let alone access it. If the SDK wants to track its own errors, it needs its own handling, independent of whatever the host does. And errors from SDK-internal calls such as sending telemetry aren't something the host needs to know about, so it's cleaner for the SDK to deal with them itself.
+
+## Three ways to handle a fire-and-forget promise
+
+How, then, can the SDK actually deal with this failure?
+
+There are three main options for a promise you don't await. They differ in who takes responsibility for the failure.
+
+| Option | What it means | `unhandledrejection` with a same-origin SDK |
+| --- | --- | --- |
+| `void sendTelemetry()` | Don't wait for the result | Can fire |
+| `sendTelemetry().catch(() => {})` | Swallow the failure on purpose | Doesn't fire |
+| `sendTelemetry().catch(e => report(e))` | Observe the failure inside the SDK | Doesn't fire |
+
+`void sendTelemetry()` looks like it handles the error, but it doesn't. It only discards the return value and signals to code reviewers and ESLint that skipping `await` is intentional. The rejection stays unhandled, and if the SDK is same-origin, it can still reach the host's `unhandledrejection` handler.
+
+`sendTelemetry().catch(() => {})` swallows the error deliberately. Reserve it for calls whose failure has no effect on the user's result, product state, billing, audit logs, or operational metrics.
+
+`sendTelemetry().catch(e => report(e))` lets the SDK author capture the failure without blocking the user. Here, `report` stands for a function that sends the error to the SDK's own monitoring channel, not to the console.
+
+:::tip[In the wild: what open-source SDKs do]
+All three options show up in real open-source SDK code.
+
+**No `await` (the `void` option): always leave a comment explaining why**
+
+In logic that sends messages automatically, awaiting would cause a deadlock. The code calls the function without `await` and without a rejection handler, which puts it in the same category as `void`. A comment explains the choice.
+
+```ts
+// no await to avoid deadlocking
+this.makeRequest({ ... })
+```
+
+[chat.ts L680](https://github.com/vercel/ai/blob/5440b3a04089fe084b9236f636b316132e890373/packages/ai/src/ui/chat.ts#L680-L681)
+
+**`.catch(() => {})`: quietly ignore stream cleanup failures**
+
+When stream processing finishes or is canceled, a failure to clean up the reader shouldn't affect the main flow. The `finally` block discards it with `.catch(() => {})`.
+
+```ts
+} finally {
+  currentReader?.cancel().catch(() => {});
+}
+```
+
+[stream-google-interactions.ts L216](https://github.com/vercel/ai/blob/5440b3a04089fe084b9236f636b316132e890373/packages/google/src/interactions/stream-google-interactions.ts#L212-L216)
+
+**`.catch(e => report(e))`: log send failures inside the SDK**
+
+The SDK sends the event without awaiting it. If sending fails, it writes the error to its internal logger, and the host never sees it. This logging only happens in debug builds (`DEBUG_BUILD`), though; production builds swallow the error silently.
+
+```ts
+fetch(upstreamSentryUrl, { method: 'POST', body: envelopeBytes })
+  .catch(err => {
+    DEBUG_BUILD && debug.error('Error sending envelope to Sentry', err);
+  });
+```
+
+[aws-lambda-extension.ts L170](https://github.com/getsentry/sentry-javascript/blob/a40375d9ee2d6b0ae22b4ecf5472ad9b0cb5e804/packages/aws-serverless/src/lambda-extension/aws-lambda-extension.ts#L170-L175)
+:::
+
+## When the host needs to know too, expose a separate API
+
+You might wonder whether the host would want to know about your SDK's rejections.
+
+With the options so far, it's hard for the SDK and the host to both see the same failure. If the SDK records it with `report`, the host never finds out. If the SDK leaves it to the host with `void`, the SDK can't reliably detect it. What if the SDK handles the failure and also passes it along to the host? Exposing an error event that the host can subscribe to removes the trade-off.
+
+```tsx
+// Inside the SDK
+sendTelemetry(payload).catch((error) => {
+  report(error)                      // Record it inside the SDK
+  sdk.emit('telemetry_error', error) // Let the host subscribe to it
+})
+
+// In the host
+sdk.on('telemetry_error', (e) => {
+  Sentry.captureException(e) // The host can forward it to its own tools
+})
+```
+
+## What changes for a cross-origin SDK?
+
+According to [MDN](https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event#usage_notes), when an SDK is loaded cross-origin (for example, from a CDN), the host's `unhandledrejection` listener doesn't receive the SDK's rejections, for security reasons. Strictly speaking, this applies when the script is loaded without CORS (no `crossorigin` attribute, or the CDN doesn't send CORS headers), and in that case even a listener the SDK registers itself never fires. With a same-origin SDK, `void` leaves the failure to the host. With a non-CORS cross-origin SDK, nobody can observe that rejection through the `unhandledrejection` event. If your SDK is loaded cross-origin, handling the error inside the SDK with `.catch()` is the safer choice.
+
+## Wrapping up
+
+Internal SDK calls whose failure doesn't change the user's result or the product's state can run as fire-and-forget. But fire-and-forget only means you start the work and don't wait for it. Something else still has to own what happens when it fails.
+
+If the SDK is same-origin, the host can handle `unhandledrejection` however it needs to. If it's cross-origin, the host might not see the rejection as a global event at all. That leaves the SDK author to decide, case by case, whether to leave the failure to the host, ignore it quietly, record it within the SDK, or report it to the host through a separate API.
+
+Making that choice explicit in the code is what completes the fire-and-forget pattern.
+
+## References
+
+1. [HTML spec - HostPromiseRejectionTracker](https://html.spec.whatwg.org/multipage/webappapis.html#the-hostpromiserejectiontracker)
+2. [MDN - unhandledrejection](https://developer.mozilla.org/en-US/docs/Web/API/Window/unhandledrejection_event#preventing_default_handling)
+3. [Mozilla Bugzilla #1642147 - preventDefault does not work for unhandledrejection event](https://bugzilla.mozilla.org/show_bug.cgi?id=1642147)

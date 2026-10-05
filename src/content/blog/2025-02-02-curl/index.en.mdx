@@ -1,0 +1,376 @@
+---
+slug: 2025-02-02-curl
+date: 2025-02-02T23:00
+title: "Understanding HTTP requests with curl"
+description: "Sending Slack notifications from automated E2E tests got me using curl. Here's how its verbose mode (-v) shows each step of an HTTP request."
+tags: [http, network, web]
+comments: true
+---
+
+## Introduction
+
+When we introduced automated end-to-end (E2E) tests, I took on the task of sending a Slack notification after each test run finished. That meant sending HTTP requests with curl, a tool I wasn't familiar with, so it turned out to be a good chance to learn.
+
+What I found most interesting was curl's verbose mode (`-v`), which lets you follow the detailed flow of an HTTP request in real time. I'd only ever pictured the steps of a network request in my head, so seeing them with my own eyes was a big help when debugging HTTP requests.
+
+This post walks through how I used `curl` to **understand HTTP requests**, and shares how that helped me solve a real problem.
+
+## What is curl?
+
+curl is a command-line tool for transferring data to or from a server using URLs. It supports a wide range of protocols, such as HTTP, HTTPS, and FTP, and people use it to test and automate API requests, upload and download files, and debug HTTP requests.
+
+> Basic curl usage
+
+
+```bash
+curl -X METHOD URL [OPTIONS]
+```
+
+- `-X METHOD`: the HTTP method (GET, POST, PUT, DELETE)
+- `URL`: the URL to send the request to
+- `[OPTIONS]`: extra settings such as headers, data, and authentication
+
+<br />
+
+### ✅  **Common use cases**
+
+> ####  GET requests (fetching data)
+
+    ```bash
+     # Basic GET request
+     PRODUCTS_URL=https://fakestoreapi.com/products/1
+     curl -X GET ${PRODUCTS_URL}
+
+     # Request with query parameters
+     SO_LIMITED_URL=https://fakestoreapi.com/products?limit=5
+     curl -X GET ${SO_LIMITED_URL}
+
+     # Add a custom header
+     SLACK_API=https://slack.com/api/files.getUploadURLExternal?filename=test.webm&length=594980
+     curl -X GET -H "Authorization: YOUR_TOKEN" ${SLACK_API}
+    ```
+
+    - Add a request header: `-H "Field-Name: value"`
+
+<br />
+
+>  #### POST requests (sending data)
+
+    ```bash
+     # Basic POST request
+     curl -X POST ${EXAMPLE_URL} \
+        -H "Content-Type: application/json" \
+        -d '{"name": "Alice", "email": "alswl99710@gmail.com"}'
+
+     # Send URL-encoded form data
+     curl -X POST ${LOGIN_URL} \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "username=alswl99710&password=1234"
+
+     # Upload a file as form data
+     curl -X POST ${UPLOAD_URL} \
+        -F "file=@image.jpg"
+
+     # Example: upload a file
+      curl -X POST ${UPLOAD_URL} \
+          -H "Content-Type: video/webm" \
+          --data-binary "@test.webm" -v
+
+     # Example: tell Slack the file upload is complete
+     curl -X POST -H "Authorization: MY_TOKEN" \
+          -H "Content-Type: application/json" \
+          --data '{
+            "files": [{
+              "id": "FILE_ID"
+            }],
+            "channel_id": "CHANNEL_ID",
+            "initial_comment": "first_thing_to_say"
+          }' https://slack.com/api/files.completeUploadExternal
+    ```
+
+     - `-d` (or `--data`): sends data in the request body
+     - `-F`: uploads a file as `multipart/form-data`
+
+<br />
+
+> #### PUT requests (updating data)
+     ```bash
+     # Basic PUT request: update a resource that already exists
+     curl -X PUT https://api.example.com/users/123 \
+        -H "Content-Type: application/json" \
+        -d '{"name": "Alice", "email": "alswl99710@gmail.com"}'
+
+     # Upload a file
+     curl -X PUT https://example.com/upload/image.jpg \
+        -H "Content-Type: image/jpeg" \
+        --data-binary "@image.jpg"
+    ```
+
+     - `--data-binary`: uploads a raw file
+
+<br />
+
+> #### DELETE requests (deleting data)
+
+     ```bash
+     # Basic DELETE request
+     curl -X DELETE https://api.example.com/users/123
+
+     # Delete with authentication (deleting usually requires it)
+     curl -X DELETE https://api.example.com/users/123 \
+        -H "Authorization: Bearer YOUR_TOKEN"
+    ```
+
+<br />
+
+> #### Authentication methods
+     - Basic authentication (`-u username:password`): curl builds the `Authorization` header for you
+
+        ```bash
+        curl -u username:password https://api.com
+        ```
+
+     - Bearer token authentication (OAuth): common in modern APIs
+
+        ```bash
+        curl -H "Authorization: Bearer YOUR_ACCESS_TOKEN" https://api.example.com/data
+        ```
+
+<br />
+
+> #### Handling responses and debugging
+     - Include the response headers in the output (`-i` or `--include`)
+
+        ```bash
+        curl -i https://api.example.com/data
+        ```
+
+     - Follow redirects such as 301 and 302 (`-L` or `--location`)
+
+        ```bash
+        curl -L https://example.com
+       ```
+
+     - Save the response body to a file (`-o`)
+
+        ```bash
+        curl -o output.json https://api.example.com/data
+       ```
+
+<br />
+
+### Following the steps of an HTTP request with `curl -v`
+
+```bash
+curl -X GET ${PRODUCTS_URL} -v
+```
+
+    With curl's verbose mode (`-v`), you can see every step of an HTTP request in detail. The following sections go through what to look for at each step.
+
+<br />
+
+> #### DNS lookup and connection
+
+```bash
+* Host fakestoreapi.com:443 was resolved.
+* IPv6: (none)
+* IPv4: 104.21.32.1, 104.21.80.1, 104.21.48.1, 104.21.112.1, 104.21.96.1, 104.21.64.1, 104.21.16.1
+*   Trying 104.21.32.1:443...
+* Connected to fakestoreapi.com (104.21.32.1) port 443
+```
+
+    - Shows the DNS lookup and the connection to the server
+
+    🔈  What it means
+
+        - The DNS lookup translates fakestoreapi.com into IP addresses
+        - `IPv4: multiple IPs` indicates load balancing
+        - `Trying… `: curl tries to connect to an IP on port 443
+        - `Connected to ..`: the TCP connection is established
+
+    ✅  What to check
+
+        - If DNS resolution fails, you get a `Could not resolve host` error
+        - If the connection attempt stalls, you get `Connection timed out`
+        - Several IPv4 addresses most likely mean the site sits behind a CDN (content delivery network)
+
+<br />
+
+> #### TLS/SSL handshake
+
+```bash
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+* (304) (IN), TLS handshake, Server hello (2):
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256
+```
+
+    - For HTTPS requests, shows how the SSL certificate is verified
+
+    🔈  What it means
+
+        - `ALPN: curl offers h2,http/1.1`: curl offers HTTP/2 (`h2`) and HTTP/1.1 through Application-Layer Protocol Negotiation (ALPN), and the server picks one
+        - `TLS handshake, Client hello`: the client starts a secure TLS connection
+        - `SSL connection using TLSv1.3`: shows the encryption protocol (TLS 1.3) and the cipher suite in use
+
+    ✅  What to check
+
+        - If the TLS handshake fails, you see `SSL certificate problem: unable to get local issuer certificate`
+        - If the TLS version is outdated, pass `--tlsv1.2` to require TLS 1.2 or later
+
+
+<br />
+
+:::note[**SSL certificates**]
+
+💎 **SSL (TLS) certificates**
+
+    - SSL is a protocol for encrypting internet traffic and verifying a server's identity. Every website with an HTTPS address uses SSL/TLS.
+    - An SSL certificate is a digital document that proves a website's identity and lets the browser and server encrypt the data they exchange.
+    - When you visit a website (`https://`), the browser checks its SSL certificate to make sure that:
+        1. The website is the real one (not a phishing site)
+        2. The data is encrypted (protected from attackers)
+
+💎 How does `curl` handle SSL certificates?
+
+    - By default, curl checks the SSL certificate to make sure it's talking to the real server.
+    - If curl finds an invalid SSL certificate, it fails with an error like this:
+        ```bash
+        curl: (60) SSL certificate problem: unable to get local issuer certificate
+        ```
+:::
+
+<br />
+
+> #### Server SSL certificate details
+
+```bash
+* Server certificate:
+*  subject: CN=fakestoreapi.com
+*  start date: Dec 30 13:34:58 2024 GMT
+*  expire date: Mar 30 14:33:14 2025 GMT
+*  SSL certificate verify ok.
+```
+
+    🔈 What it means
+
+        - `subject: CN=fakestoreapi.com`: the certificate was issued for this domain
+        - `start date / expire date`: if the certificate has expired, you get an SSL error
+        - `SSL certificate verify ok`: the SSL certificate is valid
+
+    ✅ What to check
+
+        - If the certificate has expired: `SSL certificate has expired`
+        - If the domain doesn't match: `Hostname mismatch`
+
+<br />
+
+>  #### Sending the HTTP request
+
+```bash
+* [HTTP/2] [1] OPENED stream for https://fakestoreapi.com/products/1
+* [HTTP/2] [1] [:method: GET]
+* [HTTP/2] [1] [:path: /products/1]
+* [HTTP/2] [1] [:authority: fakestoreapi.com]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+> GET /products/1 HTTP/2
+> Host: fakestoreapi.com
+> User-Agent: curl/8.7.1
+> Accept: */*
+```
+
+    🔈 What it means
+
+        - `> GET /products/1 HTTP/2`: an HTTP GET request
+        - `Host: fakestoreapi.com`: the server receiving the request
+        - `User-Agent: curl/8.7.1`: the client
+        - `Accept: */*`: the client accepts any response format
+
+    ✅  What to check
+
+        - If the API requires authentication (401 Unauthorized), add an `Authorization` request header
+
+<br />
+
+> **Checking the HTTP response status and headers**
+
+```bash
+< HTTP/2 200
+< date: Sun, 02 Feb 2025 11:38:57 GMT
+< content-type: application/json; charset=utf-8
+< content-length: 364
+< access-control-allow-origin: *
+< etag: W/"16c-MMdrqY6N0sTiefLdsgtBej9eunY"
+< x-powered-by: Express
+< cf-cache-status: DYNAMIC
+< server: cloudflare
+```
+
+    🔈 What it means
+
+        - `HTTP/2 200`: success (200 OK)
+        - `content-type: application/json`: the response is JSON
+        - `content-length: 364`: the size of the response body in bytes
+        - `< access-control-allow-origin: *`: any origin can read the response (CORS)
+        - `< cf-cache-status: DYNAMIC`: Cloudflare didn't cache the response
+        - `etag:`: used for caching
+
+    ✅ What to check
+
+        - If you get 403 Forbidden or 401 Unauthorized, you might need one of these fixes:
+          - An `Authorization` header (`Authorization: Bearer YOUR_TOKEN`)
+          - Cookies (`-H "Cookie: sessionid=12345"`)
+          - A different User-Agent (some APIs block curl's default user agent)
+
+6️⃣ **HTTP response body**
+
+```bash
+{
+  "id": 1,
+  "title": "Fjallraven - Foldsack No. 1 Backpack, Fits 15 Laptops",
+  "price": 109.95,
+  "description": "Your perfect pack for everyday use...",
+  "category": "men's clothing",
+  "image": "https://fakestoreapi.com/img/81fPKd-2AYL._AC_SL1500_.jpg",
+  "rating": { "rate": 3.9, "count": 120 }
+}
+```
+
+    🔈 What it means
+
+    - The response data is a valid JSON object with keys such as `id`, `title`, and `price`
+
+    ✅ What to check
+
+        - If the response body is empty (`{}`), a parameter might be missing
+        - If the response isn't JSON, check the `Content-Type` header
+        - If you hit a `301/302 Redirect but no response` error, run the request with the `-L` (`--location`) option
+
+          ```bash
+          # Request without -L
+          curl https://short.url/example
+
+          # The request stops at the redirect
+          HTTP/1.1 301 Moved Permanently
+          Location: https://example.com/real-url
+
+          # Request that follows the redirect
+          curl -L https://short.url/example
+            ```
+
+        - If the JSON is hard to read, pretty-print it with `jq`
+
+          ```bash
+          curl -s ${URL} | jq
+            ```
+<br />
+
+### Wrapping up
+
+I was used to sending HTTP requests with the `fetch` API, but this experience gave me a much deeper understanding of making requests from the command line with `curl`. Verbose mode (`-v`) was especially useful, since it let me **debug while watching each step of the network request**. I expect to rely on it in plenty of workflows from here on, from API testing and debugging to file uploads.
+
+With Lunar New Year behind us, the new year now feels properly underway. Small lessons like this one add up, and I want to keep growing as a developer one step at a time. This year, I'll keep learning, writing better code, and building a broader understanding of the web. Here's to a great year. 😄

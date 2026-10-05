@@ -1,0 +1,308 @@
+---
+slug: 2024-jsBinaryDataTypes
+date: 2024-10-27T10:00
+title: "Understanding binary data in JavaScript: ArrayBuffer, TypedArray, Blob, and File"
+description: "Learn how JavaScript represents binary data with ArrayBuffer, typed arrays, DataView, Blob, and File, and when to use each one."
+tags: [frontend, javascript]
+comments: true
+---
+
+## Introduction
+
+When I started working with images at my job, I took some time to learn how binary data is represented and processed. Binary data usually comes into play when you create, upload, download, or transfer files.
+
+JavaScript offers several types for representing and handling this data, such as `File`, `Blob`, `ArrayBuffer`, and `TypedArray`. Each has slightly different characteristics and serves a different purpose. This post looks at the situations each type fits best and how they differ.
+
+<details>
+<summary>TL;DR</summary>
+
+Knowing the different binary data types in JavaScript helps you process data efficiently. Here's what sets each type apart and what it's for:
+
+-   **`ArrayBuffer`**: References a fixed-size region of memory and serves as basic storage for binary data. When you need to manipulate large file data directly, you can load only the parts you need into memory and manage them efficiently.
+
+-   **`TypedArray`**: Provides a view on top of an `ArrayBuffer` that interprets the data in units of a specific number of bytes. You can read the data as various integer and floating-point types, such as `Uint8Array` and `Int16Array`, which makes typed arrays well suited to computation. They're useful for processing data stored as numbers, like image pixel data, in array form.
+
+-   **`DataView`**: A view that lets you read `ArrayBuffer` data flexibly, choosing the format at each position. It works well for buffers that mix several formats, such as network packets you read field by field, in order.
+
+-   **`Blob`**: Manages binary data along with a MIME type and often shows up in file uploads and downloads. You can turn `Blob` data received from a server into a URL to display it to the user or let them download it.
+
+-   **`File`**: A `Blob` with file system metadata added. It's mostly used with the `<input>` element to select and read files. When a user selects a local file, you can send it to the server or read its contents through the `File` object.
+
+</details>
+
+## Understanding binary data in JavaScript
+
+### The basic structure of binary data: `ArrayBuffer`
+
+The most fundamental object for handling binary data in JavaScript is `ArrayBuffer`. You could say an `ArrayBuffer` sits underneath every image, video, and audio file.
+
+```tsx
+// A contiguous 16-byte block of memory, filled with zeros.
+let buffer = new ArrayBuffer(16);
+```
+
+An `ArrayBuffer` is **a reference to a fixed-length, contiguous region of memory**: raw binary data. Going by the name alone, you might confuse `ArrayBuffer` with JavaScript's regular `Array`. But an `ArrayBuffer` has nothing to do with arrays. Here are its characteristics:
+
+-   It has a fixed length that can't grow or shrink.
+-   It takes up exactly that fixed amount of space in memory.
+-   Accessing individual bytes requires a separate "view" object. You can't access them with `buffer[index]` the way you would with a regular array.
+
+To manipulate this fixed-length data, you need a view object. A view doesn't store any data on its own; instead, it offers a particular way of interpreting the data in an `ArrayBuffer`. Typed arrays such as `Uint8Array` and `Uint16Array`, covered next, are exactly these views.
+
+For example, as the name suggests, `Uint8Array` interprets each byte (8 bits) of an `ArrayBuffer` as one integer. Each byte can then be read as a number from 0 to 255 (2^8 values), which is called an 8-bit unsigned integer. What about `Uint16Array`? It treats every 2 bytes of the `ArrayBuffer` as one integer, so it can represent 0 to 65535 (2^16 values). This is a 16-bit unsigned integer.
+
+Let's look at a quick example: reading the binary data stored in a 16-byte `ArrayBuffer` through these views. The same data can be read as one number per byte, or as one number per 2 or 4 bytes.
+
+<div style={{ display: "flex", justifyContent: "center" }}>
+    <img
+        width="700"
+        alt="arraybuffer"
+        src="https://github.com/user-attachments/assets/637e8a35-3b9c-4a75-b083-579c99bd1b43"
+    />
+</div>
+<br />
+
+As the figure shows, a `Uint8Array` view of the 16-byte `ArrayBuffer` reads each byte as one number, while a `Uint16Array` view reads each pair of bytes as one number.
+
+Because `ArrayBuffer` lets you manage memory directly, it's an efficient choice for performance-sensitive work and for very large files.
+
+<br />
+### Interpreting an `ArrayBuffer`: `TypedArray`
+
+Views like `Uint8Array` and `Uint32Array`, which you saw earlier, are generally called typed arrays. They share the same methods and properties and behave like regular arrays: they have indexes, and you can iterate over them.
+
+```tsx
+let arr8 = new Uint8Array([0, 1, 2, 3]);
+
+// Interpret the same data through a different view
+let arr16 = new Uint16Array(arr8.buffer);
+```
+
+Keep in mind that `TypedArray` is an umbrella term for the typed views listed next; there's no constructor named `TypedArray` that you can call. The kinds of typed arrays are:
+
+-   `Uint8Array`, `Uint16Array`, `Uint32Array`, and `Uint8ClampedArray`, which interpret binary data as unsigned integers. Each one determines how many bytes make up a single integer.
+-   `Int8Array`, `Int16Array`, and `Int32Array`, which interpret binary data as signed integers.
+-   `Float32Array` and `Float64Array`, which interpret binary data as signed floating-point numbers.
+
+Typed array constructors behave differently depending on the type of argument they receive. You can create a typed array without creating an `ArrayBuffer` first. A view can't exist without data, though, so if you don't pass one in, the constructor creates one for you. You can access the underlying `ArrayBuffer` through `arr.buffer` and its length through `arr.byteLength`. Passing `arr.buffer` to another constructor lets you interpret the same `ArrayBuffer` in a different way.
+
+```tsx
+// Creates a 4-byte ArrayBuffer automatically and views it as a sequence of 8-bit integers.
+let arr8 = new Uint8Array([0, 1, 2, 3]);
+
+console.log(arr8.buffer.byteLength); // 4 (bytes)
+
+// Interpret the same data through a different view
+let arr16 = new Uint16Array(arr8.buffer);
+```
+
+So what happens if you try to write a value outside a typed array's range? No error is thrown, but the excess is cut off. This is called out-of-bounds behavior.
+
+For example, `Uint8Array` can represent numbers from 0 to 255. Suppose you store 256. Only the rightmost 8 bits are kept, and the rest are discarded. Storing 256 therefore gives you 00000000, or 0, and storing 257 gives you 00000001, or 1. In other words, when you store a number beyond what `Uint8Array` can represent (2^8 values), you get the remainder when that number is divided by 2^8.
+
+```tsx
+// Create a 16-byte ArrayBuffer -> read each byte as an integer.
+let uint8Array = new Uint8Array(16);
+
+let num = 256;
+alert(num.toString(2)); // 100000000 (binary representation)
+
+// What if you store a number above the representable range (255)?
+uint8Array[0] = 256;
+uint8Array[1] = 257;
+
+alert(uint8Array[0]); // 0
+alert(uint8Array[1]); // 1
+```
+
+Remember `Uint8ClampedArray` from the list of typed arrays? To clamp usually means to restrict a number to a certain range. In the same spirit, `Uint8ClampedArray` stores 255 for any value above 255, the largest number it can represent, and stores 0 for negative numbers.
+
+<br />
+### Flexible interpretation: `DataView`
+
+Like a typed array, `DataView` is a way of interpreting an `ArrayBuffer`. The difference is that it's a highly flexible view: it can access data in any format, at any position.
+
+With a typed array, you set the format when you call the constructor. Every element must be of a single type, and the i-th number is always `array[i]`. With a `DataView`, you access data through methods like `.getUint8(i)` and choose the type each time you call a method, not when you create the view. It also doesn't create its own `ArrayBuffer`, so you have to create one in advance and pass it in. That flexibility makes `DataView` a good fit when a single buffer holds data of mixed types.
+
+```tsx
+// Create an ArrayBuffer where 1 byte = 1 integer
+let buffer = new Uint8Array([255, 255, 255, 255]).buffer;
+
+// Create a DataView that interprets that ArrayBuffer
+let dataView = new DataView(buffer);
+
+// Get an 8-bit number at offset 0
+alert(dataView.getUint8(0)); // 255
+// Get a 16-bit number at offset 0
+alert(dataView.getUint16(0)); // 65535 (the largest unsigned 16-bit number)
+// Get a 32-bit number at offset 0
+alert(dataView.getUint32(0)); // 4294967295 (the largest unsigned 32-bit number)
+
+dataView.setUint32(0, 0); // Set the 4-byte number to 0, which sets every byte to 0
+```
+
+All of these views on an `ArrayBuffer` are collectively called `ArrayBufferView`. `BufferSource` is the type that accepts either one: an `ArrayBuffer` or any `ArrayBufferView`. It's a widely used term that refers to binary data of any form.
+
+<br />
+### Binary data with a type: `Blob`
+
+If `BufferSource` is binary data, a `Blob` represents **binary data with a type**. It's mainly used to store multimedia files such as images, audio, and video as objects, and for file uploads and downloads that depend on that type.
+
+A `Blob` consists of a `type` and `blobParts`.
+
+```tsx
+new Blob(blobParts, options);
+```
+
+-   `type`: The kind of `Blob`, usually a MIME type. For example, `image/png`.
+-   `blobParts`: an array of data chunks that make up the `Blob`. It can hold `ArrayBuffer`s, typed arrays, `DataView`s, other `Blob`s, and strings.
+
+`Blob` objects are immutable. Think of how strings are immutable: you can't change the characters of a string, but you can build a new string from it. In the same way, you can't modify a `Blob`'s data directly, but you can slice off part of it to create a new `Blob` object.
+
+You can create a URL for a `Blob` and use it in elements like `<a>` and `<img>`. The browser downloads and uploads the object based on the `Blob`'s `type`, and in network requests that `type` value becomes the `Content-Type`. There are two main ways to turn a `Blob` into a URL.
+
+-   **`URL.createObjectURL(blob)`**
+
+    -   `URL.createObjectURL()` takes a `Blob` and generates a unique URL of the form `blob:<origin>/<uuid>`.
+    -   Internally, the browser maps this URL to the `Blob`. Because access to the `Blob` goes through that mapping, the URL is valid only within the current document.
+    -   The catch is that the `Blob` itself lives in memory. If the app runs for a long time and the mapping keeps referencing the `Blob`, its memory isn't released even after you no longer need it.
+    -   When you no longer need the URL, call `URL.revokeObjectURL(url)` to remove the reference from the internal mapping so the browser can free that memory.
+
+-   **data URL**
+
+    -   This approach uses `FileReader` to turn a `Blob` into a Base64-encoded data URL. Base64 encoding represents binary data as a safe, readable string.
+    -   A data URL takes the form `data:[<mediatype>][;base64]<data>`, and you can use it anywhere you'd use a regular URL.
+
+<br />
+
+    ```tsx
+    let link = document.createElement("a");
+    link.download = "hello.txt";
+
+    let blob = new Blob(["hello world"], { type: "text/plain" });
+
+    let reader = new FileReader();
+    // Converts blob -> base64, then calls onload
+    reader.readAsDataURL(blob);
+
+    reader.onload = function () {
+        link.href = reader.result; // data url
+        link.click();
+    };
+    ```
+
+-   `URL.createObjectURL(blob)` accesses the `Blob` directly through the mapping and needs no encoding or decoding, but you have to revoke the URL yourself. A Base64-encoded data URL needs no cleanup, though encoding a large `Blob` costs performance and memory. Both approaches work, and `URL.createObjectURL()` is usually faster and simpler, so it's the more common choice.
+
+<br />
+Another common use of `Blob` is drawing an image on a canvas and then uploading or downloading it. You can process images with the `<canvas>` element:
+
+1. Draw the image on the canvas with `canvas.drawImage`.
+2. Call the canvas method `.toBlob(callback, format, quality)`, which creates a `Blob` and then calls `callback`.
+
+```tsx
+let img = document.querySelector("img");
+
+let canvas = document.createElement("canvas");
+canvas.width = img.clientWidth;
+canvas.height = img.clientHeight;
+
+let context = canvas.getContext("2d");
+
+// Copy the image onto the canvas.
+context.drawImage(img, 0, 0);
+
+// toBlob is asynchronous and calls the callback when it's done.
+canvas.toBlob(function (blob) {
+    // Download the blob once it's ready
+    let link = document.createElement("a");
+    link.download = "example.png";
+
+    link.href = URL.createObjectURL(blob);
+    link.click();
+
+    // Remove the internal blob reference so the browser frees the memory.
+    URL.revokeObjectURL(link.href);
+}, "image/png");
+```
+
+<br />
+### `File`: a `Blob` with file system features
+
+A `File` object is a kind of `Blob` with extra metadata (`name`, `lastModified`). On top of that, it gives JavaScript safe access to files the user has selected, so your code can read and process them. Because `File` extends `Blob`, you can use it anywhere a `Blob` is accepted.
+
+For example, you can pass a `File` object to the same APIs you'd use with a `Blob`: `FileReader` and `URL.createObjectURL()` for reading, and `fetch` and `XMLHttpRequest.send()` for network requests.
+
+There are two ways to get a `File` object.
+
+1. The `File` constructor
+
+    ```tsx
+    new File(fileParts, fileName, [options]);
+    ```
+
+2. The `FileList` of files a user selects in `<input type="file">`, or the `DataTransfer` object from a drag-and-drop operation (the more common approach)
+
+    ```HTML
+    <input type="file" onchange="showFile(this)" />
+
+    <script>
+        function showFile(input) {
+            let file = input.files[0];
+
+            console.log(`File name: ${file.name}`); // e.g my.png
+            console.log(`Last modified: ${file.lastModified}`); // e.g 1552830408824
+        }
+    </script>
+    ```
+
+The `File` constructor is similar to the `Blob` constructor but takes additional options.
+
+```tsx
+new File(fileBits, fileName, options);
+
+// Create a file
+const file = new File(["foo"], "foo.txt", { type: "text/plain" });
+```
+
+-   `fileBits` is an iterable object holding the contents of the `File`. Possible values include `Array`, `BufferSource` (`ArrayBuffer`, `TypedArray`, `DataView`), `Blob`, and `String`.
+-   `fileName` is the file name.
+-   `options`
+    -   `type`: A string with the MIME type of the file's contents. Defaults to `""`.
+    -   `endings`: How to interpret newline characters (`\n`) when the data is text. To convert newlines to the host system's native convention, pass `native`.
+    -   `lastModified`: The time the file was last modified, as the number of milliseconds since the Unix epoch. Defaults to `Date.now()`.
+
+:::note[`FileList`, used for uploads]
+
+`FileList` represents the object returned by the `files` property of an HTML `<input>` element. It gives you access to the list of files selected with an `<input type="file">` element or dropped onto web content through the Drag and Drop API.
+
+Every `<input>` element has a `files` property of type `FileList`, which lets you access the files in the list (`HTMLInputElement.files`).
+
+`FileList` is designed as an unmodifiable list, so you can't change it or its contents directly. A regular JavaScript array, by contrast, can be modified.
+
+Browsers still support `FileList` so they don't break existing code. That doesn't mean `FileList` is deprecated.
+
+You don't create this object yourself; you get it from APIs such as `HTMLInputElement.files`. Note that its syntax differs from a real array's.
+
+```HTML
+<input id='fileItem' type='file' />
+
+// Read the file
+const file = document.getElementById('fileItem').files[0]
+```
+
+:::
+
+## Wrapping up
+
+Each binary data type has its own purpose and characteristics, so it pays to match the type to the job. Understanding the strengths of each type and using it correctly improves performance and code readability and makes a web application more stable overall. I want to keep studying these types so I can reach for the right one in each situation.
+
+## References
+
+-   [JavaScript.info - Binary data, files](https://javascript.info/binary)
+-   [Blob - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/Blob)
+-   [File - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/File)
+-   [FileList - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/FileList)
+-   [Using Files from Web Applications - MDN Web Docs](https://developer.mozilla.org/en-US/docs/Web/API/File_API/Using_files_from_web_applications)
+-   [stackoverflow - What is a blob URL and why it is used?](https://stackoverflow.com/questions/30864573/what-is-a-blob-url-and-why-it-is-used)
+-   [Inpa Blog - A complete guide to working with Base64, Blob, ArrayBuffer, and File (in Korean)](https://inpa.tistory.com/entry/JS-📚-Base64-Blob-ArrayBuffer-File-다루기-정말-이해하기-쉽게-설명)
+-   [Medium - JavaScript: Lost in binaries - Buffer/Blob/UINt8Array/ArrayBuffer](https://medium.com/@naveenkumarasinghe/javascript-lost-in-binaries-buffer-blob-uint8array-arraybuffer-ed8d2b4de44a)
