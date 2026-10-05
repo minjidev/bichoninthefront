@@ -94,7 +94,7 @@ jobs:
     steps:
       - name: "Eat well Minji, it's Friday!"
         run: |
-          echo "${GREETING}, ${FIRST_NAME}! Today is you fav, ${DINNER_MENU}!"
+          echo "${GREETING}, ${FIRST_NAME}! Today is your fav, ${DINNER_MENU}!"
         # step 레벨 환경 변수
         env:
             FIRST_NAME: Bichon
@@ -110,7 +110,7 @@ jobs:
 결과는 다음과 같습니다.
 
 ```bash
-Bon Apetite, Bichon! Today is your fav, pepperoni pizza!
+Bon Appetit, Bichon! Today is your fav, pepperoni pizza!
 ```
 
 이는 JavaScript의 스코프 개념과 유사합니다. 가장 가까운 범위의 변수가 우선 적용됩니다.
@@ -137,7 +137,7 @@ Bon Apetite, Bichon! Today is your fav, pepperoni pizza!
 
 대부분의 규칙은 직관적이지만, 마지막 규칙은 주의할 필요가 있습니다.
 
-E2E 테스트 워크플로우를 작성하면서, GitHub에서 E2E 전용 환경(Environement)을 생성하고 해당 환경에 `SOME_E2E_VAR`을 추가([참고](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment))한 적이 있습니다. 그리고`${{ vars.SOME_E2E_VAR }}`로 접근했지만 값이 비어있었습니다.
+E2E 테스트 워크플로우를 작성하면서, GitHub에서 E2E 전용 환경(Environment)을 생성하고 해당 환경에 `SOME_E2E_VAR`을 추가([참고](https://docs.github.com/en/actions/managing-workflow-runs-and-deployments/managing-deployments/managing-environments-for-deployment))한 적이 있습니다. 그리고`${{ vars.SOME_E2E_VAR }}`로 접근했지만 값이 비어있었습니다.
 
 문제는 어떤 환경(Environment)의 변수인지를 명시하지 않았다는 점이었습니다. GitHub Actions에서 같은 변수명이 여러 레벨에 존재할 수 있기 때문에 사용하려는 환경을 명확히 지정해야 합니다.
 
@@ -174,7 +174,7 @@ GitHub Actions에서 환경 변수를 참조하는 방법은 두 가지가 있�
             run: echo "${VAR_NAME}" # 1234
     ```
 
-2. GitHub Actions의 context(`${{ vars.VAR_NAME }}`) → YAML 파일 전체에서 동작
+2. GitHub Actions의 context(`${{ env.VAR_NAME }}`) → YAML 파일 전체에서 동작
 
     ```yaml
      jobs:
@@ -204,11 +204,11 @@ export VAR_NAME="${{ env.VAR_NAME }}"
 다시 말해, run 단계에서는 러너 환경 변수 또는 GitHub Actions의 context 가운데 어떤 값을 사용해도 접근이 가능하지만, 러너에 전송되지 않는 YAML 스크립트에서는 변수값에 접근하기 위해 context를 사용해야합니다.
 
 :::note[GitHub Actions Context]
-Context는 보통 달러 사인과 대괄호를 사용(`${{ context.property }}`)함을 의미합니다. If문 내에서는 `${{`와 `}}` 가 선택 사항이지만, 사용했을 경우 전체 비교 구문을 닫아야 합니다.
+Context는 보통 달러 사인과 이중 중괄호를 사용(`${{ context.property }}`)함을 의미합니다. If문 내에서는 `${{`와 `}}` 가 선택 사항이지만, 사용했을 경우 전체 비교 구문을 닫아야 합니다.
 :::
 
 
-###나가며
+### 나가며
 
 GitHub Actions의 환경 변수는 워크플로우 관리의 핵심 요소 중 하나입니다.
 
